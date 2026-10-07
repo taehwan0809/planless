@@ -26,3 +26,53 @@ select,
 textarea {
   font: inherit;
 }
+
+.home {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 20px;
+}
+
+.hero {
+  width: 100%;
+  max-width: 760px;
+  text-align: center;
+}
+
+.brand {
+  margin: 0 0 24px;
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: 0.2em;
+}
+
+.hero h1 {
+  margin: 0;
+  font-size: clamp(40px, 7vw, 72px);
+  line-height: 1.1;
+  letter-spacing: -0.04em;
+}
+
+.description {
+  margin: 28px 0 36px;
+  color: #666;
+  font-size: 17px;
+  line-height: 1.8;
+}
+
+.startButton {
+  display: inline-block;
+  padding: 15px 26px;
+  border-radius: 12px;
+  background: #111;
+  color: white;
+  text-decoration: none;
+  font-weight: 600;
+  transition: transform 0.2s;
+}
+
+.startButton:hover {
+  transform: translateY(-2px);
+}
