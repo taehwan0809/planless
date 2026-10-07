@@ -41,19 +41,28 @@ export async function searchPlaces(
 
   const data = await response.json();
 
-  return (data.places ?? []).map(
+  return (data.places ?? []).flatMap(
     (place: {
       displayName?: { text?: string };
       formattedAddress?: string;
       rating?: number;
       userRatingCount?: number;
       googleMapsUri?: string;
-    }) => ({
-      name: place.displayName?.text ?? "이름 없는 장소",
-      address: place.formattedAddress ?? "주소 정보 없음",
-      rating: place.rating,
-      userRatingCount: place.userRatingCount,
-      googleMapsUri: place.googleMapsUri,
-    })
+    }) => {
+      const name = place.displayName?.text?.trim();
+      const address = place.formattedAddress?.trim();
+
+      if (!name || !address) {
+        return [];
+      }
+
+      return [{
+        name,
+        address,
+        rating: place.rating,
+        userRatingCount: place.userRatingCount,
+        googleMapsUri: place.googleMapsUri,
+      }];
+    }
   );
 }

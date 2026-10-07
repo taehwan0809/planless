@@ -218,6 +218,243 @@ textarea {
   cursor: not-allowed;
 }
 
+.searchStatus,
+.searchError {
+  margin: 24px 0 0;
+  padding: 16px;
+  border-radius: 10px;
+  line-height: 1.6;
+}
+
+.searchStatus {
+  background: #fff;
+  color: #555;
+}
+
+.searchError {
+  background: #fff1f0;
+  color: #a12622;
+}
+
+.resultsSection {
+  margin-top: 48px;
+}
+
+.resultsSection h2 {
+  margin: 0 0 18px;
+  font-size: 24px;
+}
+
+.emptyResults {
+  padding: 24px;
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  background: #fff;
+  color: #666;
+}
+
+.placeList {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.placeItem {
+  padding: 20px;
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.placeItem h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+
+.placeItem p {
+  margin: 6px 0;
+  color: #666;
+  line-height: 1.5;
+}
+
+.placeItem .placeMeta {
+  color: #333;
+  font-size: 14px;
+}
+
+.placeItem a {
+  display: inline-block;
+  margin-top: 8px;
+  color: #111;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.itineraryButton {
+  width: 100%;
+}
+
+.itinerarySection {
+  padding-top: 20px;
+  border-top: 1px solid #e5e5e5;
+}
+
+.itinerarySection > .step {
+  margin-bottom: 10px;
+}
+
+.itinerarySummary {
+  margin: 14px 0 22px;
+  color: #666;
+  line-height: 1.7;
+}
+
+.itineraryList {
+  counter-reset: itinerary;
+}
+
+.itineraryItem .step {
+  color: #888;
+}
+
+.itineraryItem .itineraryReason {
+  margin-top: 12px;
+  color: #333;
+  line-height: 1.6;
+}
+
+.pageNav {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+}
+
+.pageNav a {
+  color: #555;
+  font-size: 14px;
+  text-decoration: none;
+}
+
+.pageNav .backLink {
+  margin-right: auto;
+  color: #111;
+  font-size: 15px;
+}
+
+.pageNav a[aria-current="page"] {
+  color: #111;
+  font-weight: 700;
+}
+
+.savedNotice {
+  margin: 0 0 10px;
+  color: #176b3a;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.savedLink {
+  margin-bottom: 24px;
+  text-decoration: none;
+}
+
+.historyList > li {
+  list-style: none;
+}
+
+.historyCard {
+  display: block;
+  padding: 22px;
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  background: #fff;
+  color: inherit;
+  text-decoration: none;
+}
+
+.historyCard:hover {
+  border-color: #aaa;
+}
+
+.historyCard h2 {
+  margin: 0 0 8px;
+  font-size: 21px;
+}
+
+.historyCard p:not(.step) {
+  color: #666;
+  line-height: 1.6;
+}
+
+.historyCard .historyDestination,
+.historyDestination {
+  color: #333;
+  font-weight: 700;
+}
+
+.historyCard span,
+.emptyResults a,
+.detailMessage a {
+  display: inline-block;
+  margin-top: 10px;
+  color: #111;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.detailHeader {
+  margin-bottom: 36px;
+}
+
+.tripConditions {
+  padding: 22px;
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.tripConditions h2 {
+  margin: 0 0 16px;
+  font-size: 19px;
+}
+
+.tripConditions dl {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin: 0;
+}
+
+.tripConditions dl > div {
+  min-width: 0;
+}
+
+.tripConditions dt {
+  margin-bottom: 5px;
+  color: #777;
+  font-size: 13px;
+}
+
+.tripConditions dd {
+  margin: 0;
+  line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+
+.detailMessage {
+  margin-top: 70px;
+  padding: 26px;
+  border-radius: 12px;
+  background: #fff;
+}
+
+.detailMessage h1 {
+  margin: 0;
+  font-size: 24px;
+}
+
 @media (max-width: 600px) {
   .createPage {
     padding-top: 25px;
@@ -232,6 +469,14 @@ textarea {
   }
 
   .optionGrid {
+    grid-template-columns: 1fr;
+  }
+
+  .pageNav {
+    gap: 14px;
+  }
+
+  .tripConditions dl {
     grid-template-columns: 1fr;
   }
 }
