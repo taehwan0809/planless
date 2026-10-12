@@ -8,6 +8,7 @@ function isNonEmptyString(value: unknown): value is string {
 }
 
 export async function POST(request: NextRequest) {
+  let stage: "setup" | "gemini" | "trip-save" | "itinerary-save" = "setup";
   try {
     const body: unknown = await request.json();
     if (!body || typeof body !== "object") {
@@ -55,7 +56,9 @@ export async function POST(request: NextRequest) {
     };
 
     const supabase = createSupabaseClient();
+    stage = "gemini";
     const itinerary = await generateItinerary(conditions, places as Place[]);
+    stage = "trip-save";
     const { data: trip, error: tripError } = await supabase
       .from("trips")
       .insert({
@@ -85,12 +88,15 @@ export async function POST(request: NextRequest) {
       address: item.address,
       rating: item.rating ?? null,
       user_rating_count: item.userRatingCount ?? null,
+      latitude: item.latitude ?? null,
+      longitude: item.longitude ?? null,
       duration: item.duration,
       reason: item.reason,
       google_maps_uri: item.googleMapsUri ?? null,
       order_index: index,
     }));
 
+    stage = "itinerary-save";
     const { error: itineraryError } = await supabase
       .from("itineraries")
       .insert(itineraryRows);
@@ -115,14 +121,15 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ tripId: trip.id, ...itinerary });
   } catch (error) {
     console.error("Itinerary generation error:", error);
-    const message =
-      error instanceof Error &&
-      (error.message.includes("Supabase") ||
-        error.message.includes("Google Places") ||
-        error.message.includes("일정") ||
-        error.message.includes("Gemini"))
+    const message = stage === "gemini"
+      ? error instanceof Error
         ? error.message
-        : "AI 일정 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.";
+        : "AI 일정 생성 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
+      : stage === "setup"
+        ? "여행 기록 서비스 설정을 확인할 수 없습니다. 잠시 후 다시 시도해주세요."
+        : stage === "trip-save"
+          ? "일정은 생성했지만 여행 기록을 저장하지 못했습니다."
+          : "여행 일정 저장 중 오류가 발생했습니다. 다시 시도해주세요.";
 
     return NextResponse.json({ error: message }, { status: 500 });
   }

@@ -1,6 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateItinerary, type ReplanContext, type TripConditions } from "@/lib/gemini";
-import { searchPlaces, type Place } from "@/lib/google-places";
+import {
+  searchNearbyPlaces,
+  searchPlaces,
+  type Coordinates,
+  type NearbySearchCategory,
+  type Place,
+} from "@/lib/google-places";
 import { createSupabaseClient } from "@/lib/supabase";
 
 const validReasons = [
@@ -8,6 +14,7 @@ const validReasons = [
   "시간이 더 남았어요", "예산이 변경됐어요", "다른 종류의 활동을 하고 싶어요",
 ];
 const validActivities = ["관광", "카페", "맛집", "쇼핑", "체험", "산책"];
+const nearbyCategories: NearbySearchCategory[] = ["tourist_attraction", "indoor", "cafe", "restaurant"];
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type TripRecord = {
   id: string; destination: string; remaining_time: number; budget: number; people: number;
@@ -17,6 +24,7 @@ type ItineraryRecord = {
   id: string; place_name: string; address: string; rating: number | null;
   user_rating_count: number | null; duration: number; reason: string;
   google_maps_uri: string | null; order_index: number;
+  latitude: number | null; longitude: number | null;
 };
 function isStringArray(value: unknown): value is string[] {
   return Array.isArray(value) && value.length > 0 &&
@@ -54,6 +62,25 @@ export async function POST(request: NextRequest) {
   const budget = Number(input.budget);
   const activities = input.activities;
   const replacePlaceIds = input.replacePlaceIds;
+  let currentLocation: Coordinates | null = null;
+  if (input.currentLocation !== undefined && input.currentLocation !== null) {
+    if (typeof input.currentLocation !== "object") {
+      return NextResponse.json({ error: "현재 위치 형식이 올바르지 않습니다." }, { status: 400 });
+    }
+    const point = input.currentLocation as Record<string, unknown>;
+    if (
+      typeof point.latitude !== "number" || !Number.isFinite(point.latitude) ||
+      point.latitude < -90 || point.latitude > 90 ||
+      typeof point.longitude !== "number" || !Number.isFinite(point.longitude) ||
+      point.longitude < -180 || point.longitude > 180
+    ) {
+      return NextResponse.json({ error: "현재 위치 좌표가 올바르지 않습니다." }, { status: 400 });
+    }
+    currentLocation = { latitude: point.latitude, longitude: point.longitude };
+  }
+  const nearbyCategory = input.nearbyCategory ?? "tourist_attraction";
+  const nearbyRadius = input.nearbyRadius === undefined ? 1500 : Number(input.nearbyRadius);
+  const nearbyPlaceIds = input.nearbyPlaceIds ?? [];
   if (typeof tripId !== "string" || !uuidPattern.test(tripId)) {
     return NextResponse.json({ error: "기존 일정 ID가 올바르지 않습니다." }, { status: 400 });
   }
@@ -66,7 +93,11 @@ export async function POST(request: NextRequest) {
     activities.length > validActivities.length ||
     !activities.every((activity) => validActivities.includes(activity)) ||
     !Array.isArray(replacePlaceIds) ||
-    !replacePlaceIds.every((id) => typeof id === "string" && uuidPattern.test(id))
+    !replacePlaceIds.every((id) => typeof id === "string" && uuidPattern.test(id)) ||
+    !Array.isArray(nearbyPlaceIds) || nearbyPlaceIds.length > 20 ||
+    !nearbyPlaceIds.every((id) => typeof id === "string" && id.length > 0 && id.length <= 256) ||
+    !nearbyCategories.includes(nearbyCategory as NearbySearchCategory) ||
+    !Number.isInteger(nearbyRadius) || nearbyRadius < 100 || nearbyRadius > 5000
   ) {
     return NextResponse.json({ error: "남은 시간, 예산, 활동을 확인해주세요." }, { status: 400 });
   }
@@ -90,7 +121,7 @@ export async function POST(request: NextRequest) {
     if (!tripData) return NextResponse.json({ error: "기존 일정을 찾을 수 없습니다." }, { status: 404 });
     trip = tripData as TripRecord;
     const { data: itemData, error: itemError } = await supabase.from("itineraries")
-      .select("id, place_name, address, rating, user_rating_count, duration, reason, google_maps_uri, order_index")
+      .select("id, place_name, address, rating, user_rating_count, duration, reason, google_maps_uri, order_index, latitude, longitude")
       .eq("trip_id", tripId).order("order_index", { ascending: true });
     if (itemError) return safeError(itemError, "기존 일정 장소를 불러오지 못했습니다.");
     oldItems = (itemData ?? []) as ItineraryRecord[];
@@ -114,15 +145,39 @@ export async function POST(request: NextRequest) {
     ? [`${trip.destination} 실내 관광`, ...activities.slice(0, 2).map((activity) => `${trip.destination} ${activity}`)]
     : activities.slice(0, 3).map((activity) => `${trip.destination} ${activity}`);
   const uniqueQueries = [...new Set(queries)].slice(0, 3);
-  let searchResults: Place[];
+  let searchResults: Place[] = [];
   try {
     const results = await Promise.all(uniqueQueries.map((query) => searchPlaces(query)));
     const unique = new Map<string, Place>();
     results.flat().forEach((place) => unique.set(`${place.name}|${place.address}`, place));
     searchResults = [...unique.values()];
   } catch (error) {
-    return safeError(error, "Google Places에서 대체 장소를 검색하지 못했습니다.");
+    if (!currentLocation) return safeError(error, "Google Places에서 대체 장소를 검색하지 못했습니다.");
+    console.error("Destination place search failed; continuing with nearby results.", error);
   }
+  let nearbyResults: Place[] = [];
+  if (currentLocation) {
+    try {
+      nearbyResults = await searchNearbyPlaces(
+        currentLocation,
+        nearbyRadius,
+        nearbyCategory as NearbySearchCategory
+      );
+    } catch (error) {
+      return safeError(error, "현재 위치 주변 장소를 검색하지 못했습니다.");
+    }
+  }
+  const nearbyById = new Map(
+    nearbyResults.filter((place) => place.id).map((place) => [place.id!, place])
+  );
+  const selectedNearby = (nearbyPlaceIds as string[]).map((id) => nearbyById.get(id));
+  if (selectedNearby.some((place) => !place)) {
+    return NextResponse.json({
+      error: "선택한 주변 장소를 다시 확인할 수 없습니다. 주변 장소를 다시 검색해 선택해주세요.",
+    }, { status: 422 });
+  }
+  const preferredPlaceNames = [...new Set(selectedNearby.flatMap((place) => place ? [place.name] : []))];
+  searchResults = [...searchResults, ...nearbyResults];
   if (searchResults.length === 0) {
     return NextResponse.json({
       error: "대체 장소를 찾지 못했습니다. 검색 지역이나 원하는 활동을 바꿔 다시 시도해주세요. 기존 일정은 그대로 보존되어 있습니다.",
@@ -133,6 +188,7 @@ export async function POST(request: NextRequest) {
     id: item.id, name: item.place_name, address: item.address,
     rating: item.rating ?? undefined, userRatingCount: item.user_rating_count ?? undefined,
     googleMapsUri: item.google_maps_uri ?? undefined, duration: item.duration, reason: item.reason,
+    latitude: item.latitude ?? undefined, longitude: item.longitude ?? undefined,
   }));
   const excludedNames = new Set(replaceItems.map((item) => item.place_name));
   const candidateMap = new Map<string, Place>();
@@ -162,6 +218,7 @@ export async function POST(request: NextRequest) {
       activities: trip.activities,
     },
     replacePlaceNames: replaceItems.map((item) => item.place_name),
+    preferredPlaceNames,
   };
   let itinerary;
   try {
@@ -186,6 +243,7 @@ export async function POST(request: NextRequest) {
   const itineraryRows = itinerary.items.map((item, index) => ({
     trip_id: newTrip.id, place_name: item.name, address: item.address,
     rating: item.rating ?? null, user_rating_count: item.userRatingCount ?? null,
+    latitude: item.latitude ?? null, longitude: item.longitude ?? null,
     duration: item.duration, reason: item.reason,
     google_maps_uri: item.googleMapsUri ?? null, order_index: index,
   }));

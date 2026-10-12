@@ -4,8 +4,11 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import type { FormEvent } from "react";
 import type { ItineraryItem } from "@/lib/gemini";
+import type { Coordinates, NearbySearchCategory, Place } from "@/lib/google-places";
+import ItineraryMapLoader from "./itinerary-map-loader";
 
 type ExistingPlace = ItineraryItem & { id: string };
+type NearbyCategory = NearbySearchCategory;
 type ReplanFormProps = {
   tripId: string;
   remainingTime: number;
@@ -32,11 +35,70 @@ export default function ReplanForm({ tripId, remainingTime, budget, activities, 
   const [updatedTime, setUpdatedTime] = useState(String(remainingTime));
   const [updatedBudget, setUpdatedBudget] = useState(String(budget));
   const [selectedActivities, setSelectedActivities] = useState(activities);
+  const [currentPosition, setCurrentPosition] = useState<Coordinates | null>(null);
+  const [nearbyCategory, setNearbyCategory] = useState<NearbyCategory>("tourist_attraction");
+  const [nearbyRadius, setNearbyRadius] = useState(1500);
+  const [nearbyPlaces, setNearbyPlaces] = useState<Place[]>([]);
+  const [selectedNearbyIds, setSelectedNearbyIds] = useState<string[]>([]);
+  const [activeMapKey, setActiveMapKey] = useState<string | null>(null);
+  const [locationError, setLocationError] = useState("");
+  const [nearbyError, setNearbyError] = useState("");
+  const [isSearchingNearby, setIsSearchingNearby] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
 
   const toggleValue = (value: string, values: string[], setter: (next: string[]) => void) => {
     setter(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
+  };
+
+  const requestLocation = () => {
+    setLocationError("");
+    if (!navigator.geolocation) {
+      setLocationError("이 브라우저에서는 현재 위치를 사용할 수 없습니다.");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        setCurrentPosition({
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+        });
+        setActiveMapKey(null);
+      },
+      () => setLocationError("현재 위치를 가져오지 못했습니다. 권한을 허용하거나 위치 없이 일정을 다시 만들어주세요."),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  };
+
+  const handleNearbySearch = async () => {
+    if (!currentPosition) {
+      setNearbyError("먼저 현재 위치를 가져와주세요.");
+      return;
+    }
+    setIsSearchingNearby(true);
+    setNearbyError("");
+    setSelectedNearbyIds([]);
+    try {
+      const response = await fetch("/api/places/nearby", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          location: currentPosition,
+          category: nearbyCategory,
+          radius: nearbyRadius,
+        }),
+      });
+      const data: { places?: Place[]; error?: string } = await response.json();
+      if (!response.ok) throw new Error(data.error || "주변 장소를 검색하지 못했습니다.");
+      setNearbyPlaces(data.places ?? []);
+      setActiveMapKey(data.places?.[0]?.id ? `nearby:${data.places[0].id}` : null);
+      if (!data.places?.length) setNearbyError("이 반경에서 장소를 찾지 못했습니다. 검색 반경을 넓혀보세요.");
+    } catch (searchError) {
+      setNearbyError(searchError instanceof Error ? searchError.message : "주변 장소 검색에 실패했습니다.");
+      setNearbyPlaces([]);
+    } finally {
+      setIsSearchingNearby(false);
+    }
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -50,6 +112,10 @@ export default function ReplanForm({ tripId, remainingTime, budget, activities, 
         body: JSON.stringify({
           tripId, reason, details, replacePlaceIds,
           remainingTime: updatedTime, budget: updatedBudget, activities: selectedActivities,
+          currentLocation: currentPosition,
+          nearbyCategory,
+          nearbyRadius,
+          nearbyPlaceIds: selectedNearbyIds,
         }),
       });
       const data: { tripId?: string; error?: string } = await response.json();
@@ -67,6 +133,92 @@ export default function ReplanForm({ tripId, remainingTime, budget, activities, 
   };
 
   return (
+    <>
+    <section className="itineraryMapSection" aria-labelledby="map-heading">
+      <h2 id="map-heading">여행 지도</h2>
+      <p className="replanDescription">장소와 현재 위치를 지도에서 확인할 수 있습니다. 위치는 브라우저에서만 유지됩니다.</p>
+      <div className="locationToolbar">
+        <button className="optionButton" type="button" onClick={requestLocation}>
+          {currentPosition ? "현재 위치 새로고침" : "내 위치 사용"}
+        </button>
+        <button className="optionButton" type="button" disabled={!currentPosition}
+          onClick={() => setActiveMapKey(null)}>
+          현재 위치로 지도 이동
+        </button>
+      </div>
+      {locationError && <p className="locationNotice" role="status">{locationError}</p>}
+      <div className="nearbySearchControls">
+        <label className="nearbyControl">
+          장소 종류
+          <select value={nearbyCategory} onChange={(event) => setNearbyCategory(event.target.value as NearbyCategory)}>
+            <option value="tourist_attraction">관광지</option>
+            <option value="indoor">실내 관광지</option>
+            <option value="cafe">카페</option>
+            <option value="restaurant">식당</option>
+          </select>
+        </label>
+        <label className="nearbyControl">
+          검색 반경
+          <select value={nearbyRadius} onChange={(event) => setNearbyRadius(Number(event.target.value))}>
+            <option value={500}>500m</option>
+            <option value={1500}>1.5km</option>
+            <option value={3000}>3km</option>
+            <option value={5000}>5km</option>
+          </select>
+        </label>
+        <button className="generateButton" type="button"
+          disabled={!currentPosition || isSearchingNearby} onClick={handleNearbySearch}>
+          {isSearchingNearby ? "주변 장소 검색 중..." : "현재 위치 주변 검색"}
+        </button>
+      </div>
+      {nearbyError && <p className="replanError" role="alert">{nearbyError}</p>}
+      <ItineraryMapLoader items={items} nearbyPlaces={nearbyPlaces} currentPosition={currentPosition}
+        activeKey={activeMapKey} onSelect={setActiveMapKey} />
+      <div className="itineraryMapLegend" aria-label="지도 마커 안내">
+        <span><i className="mapLegendNumber">1</i> 일정 순서</span>
+        <span><i className="mapLegendNearby">+</i> 주변 장소 후보</span>
+        <span><i className="mapLegendCurrent" /> 내 위치</span>
+      </div>
+      <h3 className="mapListHeading">현재 일정</h3>
+      <ol className="placeList itineraryList mapPlaceList">
+        {items.map((item, index) => (
+          <li className="placeItem itineraryItem" key={item.id}>
+            <button type="button" className="mapPlaceSelect"
+              onClick={() => setActiveMapKey(`itinerary:${item.id}`)}>
+              <span className="mapListNumber">{String(index + 1).padStart(2, "0")}</span>
+              <span><strong>{item.name}</strong><small>{item.address}</small>
+                <small>예상 체류 {item.duration}분</small></span>
+            </button>
+            {item.googleMapsUri && <a href={item.googleMapsUri} target="_blank" rel="noreferrer">Google Maps에서 길찾기 ↗</a>}
+          </li>
+        ))}
+      </ol>
+      {nearbyPlaces.length > 0 && (
+        <>
+          <h3 className="mapListHeading">현재 위치 주변 장소</h3>
+          <ul className="placeList nearbyPlaceList">
+            {nearbyPlaces.map((place) => (
+              <li className="placeItem" key={place.id ?? `${place.name}|${place.address}`}>
+                <button type="button" className="mapPlaceSelect"
+                  onClick={() => setActiveMapKey(`nearby:${place.id}`)}>
+                  <span className="mapListNumber mapListNumberNearby">+</span>
+                  <span><strong>{place.name}</strong><small>{place.address}</small>
+                    <small>{place.rating !== undefined ? `평점 ${place.rating}` : "평점 정보 없음"}</small></span>
+                </button>
+                {place.googleMapsUri && <a href={place.googleMapsUri} target="_blank" rel="noreferrer">Google Maps에서 보기 ↗</a>}
+                <label className="nearbyCandidateToggle">
+                  <input type="checkbox" checked={!!place.id && selectedNearbyIds.includes(place.id)}
+                    disabled={!place.id}
+                    onChange={() => place.id && toggleValue(place.id, selectedNearbyIds, setSelectedNearbyIds)} />
+                  재구성 후보에 포함
+                </label>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </section>
+
     <section className="replanPanel" aria-labelledby="replan-heading">
       <h2 id="replan-heading">일정 다시 만들기</h2>
       <p className="replanDescription">변경 사유와 바꿀 장소를 알려주면 기존 일정에서 필요한 부분만 다시 구성합니다.</p>
@@ -138,5 +290,6 @@ export default function ReplanForm({ tripId, remainingTime, budget, activities, 
       </p>}
       {error && <p className="replanError" role="alert">{error}</p>}
     </section>
+    </>
   );
 }

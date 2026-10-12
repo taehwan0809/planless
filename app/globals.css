@@ -179,6 +179,196 @@ textarea {
   background: #fff;
 }
 
+.itineraryMapSection {
+  margin-top: 38px;
+  padding: 24px;
+  border: 1px solid #e5e5e5;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.itineraryMapSection > h2 {
+  margin: 0 0 10px;
+  font-size: 24px;
+}
+
+.locationToolbar,
+.nearbySearchControls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+  margin: 18px 0;
+}
+
+.nearbyControl {
+  display: grid;
+  gap: 7px;
+  min-width: 140px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.nearbyControl select {
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.nearbySearchControls .generateButton {
+  margin: 0;
+}
+
+.locationNotice {
+  color: #8a5b00;
+  line-height: 1.5;
+}
+
+.itineraryMapCanvas,
+.itineraryMapLoading {
+  width: 100%;
+  height: 420px;
+  overflow: hidden;
+  border: 1px solid #e5e5e5;
+  border-radius: 12px;
+  background: #eef1ed;
+}
+
+.itineraryMapLoading {
+  display: grid;
+  place-items: center;
+  color: #666;
+}
+
+.planless-marker-wrap {
+  background: transparent;
+  border: 0;
+}
+
+.planless-marker,
+.mapLegendNumber,
+.mapLegendNearby {
+  display: inline-grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #202d25;
+  box-shadow: 0 2px 7px #0004;
+  color: #fff;
+  font-size: 14px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.planless-marker-nearby,
+.mapLegendNearby {
+  background: #e06a35;
+}
+
+.planless-marker-nearby {
+  font-size: 21px;
+}
+
+.planless-current-marker,
+.mapLegendCurrent {
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  border: 3px solid #fff;
+  border-radius: 50%;
+  background: #2878e3;
+  box-shadow: 0 0 0 5px #2878e34a, 0 1px 6px #0006;
+}
+
+.itineraryMapLegend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  padding: 14px 2px;
+  color: #555;
+  font-size: 13px;
+}
+
+.itineraryMapLegend > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.mapLegendNumber,
+.mapLegendNearby {
+  width: 20px;
+  height: 20px;
+  font-size: 11px;
+}
+
+.mapLegendNearby {
+  font-size: 15px;
+}
+
+.mapListHeading {
+  margin: 24px 0 12px;
+  font-size: 18px;
+}
+
+.mapPlaceSelect {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.mapPlaceSelect > span:last-child {
+  display: grid;
+  gap: 5px;
+}
+
+.mapPlaceSelect small {
+  color: #666;
+  line-height: 1.4;
+}
+
+.mapListNumber {
+  display: inline-grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 28px;
+  place-items: center;
+  border-radius: 50%;
+  background: #202d25;
+  color: #fff;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.mapListNumberNearby {
+  background: #e06a35;
+}
+
+.nearbyCandidateToggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 12px;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.nearbyPlaceList .placeItem {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+
 .replanPanel h2 {
   margin: 0 0 10px;
   font-size: 22px;
@@ -567,5 +757,14 @@ textarea {
 
   .replanPanel {
     padding: 18px;
+  }
+
+  .itineraryMapSection {
+    padding: 18px;
+  }
+
+  .itineraryMapCanvas,
+  .itineraryMapLoading {
+    height: 340px;
   }
 }

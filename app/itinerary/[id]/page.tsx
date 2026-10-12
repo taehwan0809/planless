@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createSupabaseClient } from "@/lib/supabase";
+import { searchPlaces } from "@/lib/google-places";
 import ReplanForm from "./replan-form";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,8 @@ type ItineraryRecord = {
   reason: string;
   google_maps_uri: string | null;
   order_index: number;
+  latitude: number | null;
+  longitude: number | null;
 };
 
 type PageProps = { params: Promise<{ id: string }> };
@@ -57,7 +60,7 @@ export default async function ItineraryDetailPage({ params }: PageProps) {
         trip = tripData as TripRecord;
         const { data: itemData, error: itemError } = await supabase
           .from("itineraries")
-          .select("id, place_name, address, rating, user_rating_count, duration, reason, google_maps_uri, order_index")
+          .select("id, place_name, address, rating, user_rating_count, duration, reason, google_maps_uri, order_index, latitude, longitude")
           .eq("trip_id", id)
           .order("order_index", { ascending: true });
 
@@ -66,7 +69,25 @@ export default async function ItineraryDetailPage({ params }: PageProps) {
           errorMessage = "일정 장소 정보를 불러오지 못했습니다.";
           trip = null;
         } else {
-          items = (itemData ?? []) as ItineraryRecord[];
+          const storedItems = (itemData ?? []) as ItineraryRecord[];
+          items = await Promise.all(storedItems.map(async (item) => {
+            if (typeof item.latitude === "number" && typeof item.longitude === "number") {
+              return item;
+            }
+            try {
+              const matches = await searchPlaces(`${item.place_name} ${item.address}`, 1);
+              const resolved = matches.find((place) =>
+                place.name === item.place_name && place.address === item.address
+              ) ?? matches.find((place) => place.name === item.place_name);
+              return {
+                ...item,
+                latitude: resolved?.latitude ?? null,
+                longitude: resolved?.longitude ?? null,
+              };
+            } catch {
+              return item;
+            }
+          }));
         }
       }
     } catch (error) {
@@ -131,39 +152,13 @@ export default async function ItineraryDetailPage({ params }: PageProps) {
                 rating: item.rating ?? undefined,
                 userRatingCount: item.user_rating_count ?? undefined,
                 googleMapsUri: item.google_maps_uri ?? undefined,
+                latitude: item.latitude ?? undefined,
+                longitude: item.longitude ?? undefined,
                 duration: item.duration,
                 reason: item.reason,
               }))}
             />
 
-            <section className="resultsSection">
-              <h2>일정</h2>
-              {items.length === 0 ? (
-                <p className="emptyResults">저장된 일정 장소가 없습니다.</p>
-              ) : (
-                <ol className="placeList">
-                  {items.map((item, index) => (
-                    <li className="placeItem itineraryItem" key={item.id}>
-                      <p className="step">{String(index + 1).padStart(2, "0")}</p>
-                      <h3>{item.place_name}</h3>
-                      <p>{item.address}</p>
-                      <p className="placeMeta">
-                        {item.rating !== null ? `평점 ${item.rating}` : "평점 정보 없음"}
-                        {item.user_rating_count !== null &&
-                          ` · 리뷰 ${item.user_rating_count.toLocaleString()}개`}
-                        {` · 예상 체류 ${item.duration}분`}
-                      </p>
-                      <p className="itineraryReason">{item.reason}</p>
-                      {item.google_maps_uri && (
-                        <a href={item.google_maps_uri} target="_blank" rel="noreferrer">
-                          Google Maps에서 보기 ↗
-                        </a>
-                      )}
-                    </li>
-                  ))}
-                </ol>
-              )}
-            </section>
           </>
         ) : null}
       </div>
