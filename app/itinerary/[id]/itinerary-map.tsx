@@ -5,6 +5,13 @@ import L from "leaflet";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import type { ItineraryMapProps } from "./itinerary-map-loader";
 
+function isValidCoordinates(latitude: unknown, longitude: unknown): latitude is number {
+  return typeof latitude === "number" && Number.isFinite(latitude) &&
+    latitude >= -90 && latitude <= 90 &&
+    typeof longitude === "number" && Number.isFinite(longitude) &&
+    longitude >= -180 && longitude <= 180;
+}
+
 function numberedIcon(number: number) {
   return L.divIcon({
     className: "planless-marker-wrap",
@@ -31,26 +38,40 @@ const currentLocationIcon = L.divIcon({
 function MapFocus({ items, nearbyPlaces, currentPosition, activeKey }: ItineraryMapProps) {
   const map = useMap();
   useEffect(() => {
+    const refreshSize = () => map.invalidateSize({ pan: false });
+    const frame = window.requestAnimationFrame(refreshSize);
+    const resizeObserver = typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(refreshSize)
+      : null;
+    resizeObserver?.observe(map.getContainer());
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      resizeObserver?.disconnect();
+    };
+  }, [map]);
+
+  useEffect(() => {
     if (activeKey?.startsWith("itinerary:")) {
       const item = items.find((place) => `itinerary:${place.id}` === activeKey);
-      if (typeof item?.latitude === "number" && typeof item.longitude === "number") {
-        map.flyTo([item.latitude, item.longitude], Math.max(map.getZoom(), 14), { duration: 0.45 });
+      if (item && isValidCoordinates(item.latitude, item.longitude)) {
+        map.flyTo([item.latitude!, item.longitude!], Math.max(map.getZoom(), 14), { duration: 0.45 });
         return;
       }
     }
-    if (activeKey?.startsWith("nearby:")) {
-      const place = nearbyPlaces.find((candidate) => `nearby:${candidate.id}` === activeKey);
-      if (typeof place?.latitude === "number" && typeof place.longitude === "number") {
-        map.flyTo([place.latitude, place.longitude], Math.max(map.getZoom(), 14), { duration: 0.45 });
-        return;
-      }
-    }
-    if (currentPosition) {
+    if (currentPosition && isValidCoordinates(currentPosition.latitude, currentPosition.longitude)) {
       map.flyTo([currentPosition.latitude, currentPosition.longitude], Math.max(map.getZoom(), 14), { duration: 0.45 });
       return;
     }
+    if (activeKey?.startsWith("nearby:")) {
+      const place = nearbyPlaces.find((candidate) => `nearby:${candidate.id}` === activeKey);
+      if (place && isValidCoordinates(place.latitude, place.longitude)) {
+        map.flyTo([place.latitude!, place.longitude!], Math.max(map.getZoom(), 14), { duration: 0.45 });
+        return;
+      }
+    }
     const valid = items.filter((item) =>
-      typeof item.latitude === "number" && typeof item.longitude === "number"
+      isValidCoordinates(item.latitude, item.longitude)
     );
     if (valid.length > 1) {
       map.fitBounds(valid.map((item) => [item.latitude!, item.longitude!] as [number, number]), { padding: [32, 32] });
@@ -68,18 +89,23 @@ export default function ItineraryMap({
   activeKey,
   onSelect,
 }: ItineraryMapProps) {
-  const firstLocated = items.find((item) =>
-    typeof item.latitude === "number" && typeof item.longitude === "number"
-  );
-  const center: [number, number] = currentPosition
-    ? [currentPosition.latitude, currentPosition.longitude]
+  const firstLocated = items.find((item) => isValidCoordinates(item.latitude, item.longitude));
+  const hasCurrentPosition = currentPosition &&
+    isValidCoordinates(currentPosition.latitude, currentPosition.longitude);
+  const center: [number, number] = hasCurrentPosition
+    ? [currentPosition!.latitude, currentPosition!.longitude]
     : firstLocated
       ? [firstLocated.latitude!, firstLocated.longitude!]
       : [36.5, 127.8];
 
   return (
     <div className="itineraryMapCanvas">
-      <MapContainer center={center} zoom={firstLocated || currentPosition ? 13 : 7} scrollWheelZoom>
+      <MapContainer
+        center={center}
+        zoom={firstLocated || hasCurrentPosition ? 13 : 7}
+        scrollWheelZoom
+        style={{ width: "100%", height: "100%" }}
+      >
         <TileLayer
           url="https://tile.openstreetmap.org/{z}/{x}/{y}.png"
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noreferrer">OpenStreetMap contributors</a>'
@@ -87,8 +113,8 @@ export default function ItineraryMap({
         <MapFocus items={items} nearbyPlaces={nearbyPlaces} currentPosition={currentPosition}
           activeKey={activeKey} onSelect={onSelect} />
         {items.map((item, index) => (
-          typeof item.latitude === "number" && typeof item.longitude === "number" ? (
-            <Marker key={`itinerary:${item.id}`} position={[item.latitude, item.longitude]}
+          isValidCoordinates(item.latitude, item.longitude) ? (
+            <Marker key={`itinerary:${item.id}`} position={[item.latitude!, item.longitude!]}
               icon={numberedIcon(index + 1)} eventHandlers={{ click: () => onSelect(`itinerary:${item.id}`) }}>
               <Popup>
                 <strong>{index + 1}. {item.name}</strong><br />
@@ -99,8 +125,8 @@ export default function ItineraryMap({
           ) : null
         ))}
         {nearbyPlaces.map((place) => (
-          typeof place.latitude === "number" && typeof place.longitude === "number" ? (
-            <Marker key={`nearby:${place.id}`} position={[place.latitude, place.longitude]}
+          isValidCoordinates(place.latitude, place.longitude) ? (
+            <Marker key={`nearby:${place.id}`} position={[place.latitude!, place.longitude!]}
               icon={nearbyIcon} eventHandlers={{ click: () => onSelect(`nearby:${place.id}`) }}>
               <Popup>
                 <strong>{place.name}</strong><br />
@@ -110,7 +136,7 @@ export default function ItineraryMap({
             </Marker>
           ) : null
         ))}
-        {currentPosition && (
+        {hasCurrentPosition && currentPosition && (
           <Marker position={[currentPosition.latitude, currentPosition.longitude]} icon={currentLocationIcon}>
             <Popup>현재 위치</Popup>
           </Marker>
