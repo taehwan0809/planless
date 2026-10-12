@@ -21,6 +21,19 @@ export type GeneratedItinerary = {
   items: ItineraryItem[];
 };
 
+export type ReplanContext = {
+  changeReason: string;
+  details: string;
+  previousConditions: {
+    situation: string;
+    remainingTime: number;
+    budget: number;
+    activities: string[];
+  };
+  previousItems: Array<ItineraryItem & { id: string }>;
+  replacePlaceNames: string[];
+};
+
 type GeminiItinerary = {
   title?: unknown;
   summary?: unknown;
@@ -64,7 +77,8 @@ function parseJsonResponse(text: string): GeminiItinerary {
 
 export async function generateItinerary(
   conditions: TripConditions,
-  places: Place[]
+  places: Place[],
+  replanContext?: ReplanContext
 ): Promise<GeneratedItinerary> {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) {
@@ -72,7 +86,7 @@ export async function generateItinerary(
   }
 
   const ai = new GoogleGenAI({ apiKey });
-  const prompt = `너는 여행 일정을 구성하는 도우미다. 반드시 아래 places 배열에 있는 장소만 선택하라.
+  const basePrompt = `너는 여행 일정을 구성하는 도우미다. 반드시 아래 places 배열에 있는 장소만 선택하라.
 places에 없는 장소를 만들거나 장소명을 바꾸지 마라. placeName은 제공된 장소명과 완전히 동일해야 한다.
 사용자 조건과 예산을 고려하고, remainingTime 안에 끝나도록 각 장소의 체류 시간을 분 단위로 정하라.
 비가 오는 상황이면 실내 장소를 우선하고, 시간이 부족하면 장소 수를 줄여라.
@@ -84,6 +98,21 @@ ${JSON.stringify(conditions)}
 
 places:
 ${JSON.stringify(places)}`;
+  const replanPrompt = replanContext
+    ? `
+
+기존 일정 재구성 지시:
+변경 사유: ${replanContext.changeReason}
+추가 설명: ${replanContext.details || "없음"}
+변경 전 여행 조건: ${JSON.stringify(replanContext.previousConditions)}
+기존 일정: ${JSON.stringify(replanContext.previousItems)}
+사용자가 교체 대상으로 지정한 장소: ${JSON.stringify(replanContext.replacePlaceNames)}
+교체 대상으로 지정되지 않은 기존 장소는 변경 사유와 충돌하지 않는 한 일정에 유지하라. 관계없는 장소까지 전부 바꾸지 마라.
+교체 대상으로 지정된 장소는 새 일정에 포함하지 마라.
+비가 오는 경우 실내 장소를 우선하라. 남은 시간이 부족하면 전체 체류 시간 합계가 남은 시간 이내가 되도록 장소 수나 체류 시간을 줄여라.
+새 장소는 위 places 배열의 Google Places 결과에 있는 장소만 사용하라.`
+    : "";
+  const prompt = basePrompt + replanPrompt;
 
   const response = await ai.models.generateContent({
     model: "gemini-3.8-flash",

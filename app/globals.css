@@ -139,7 +139,8 @@ textarea {
   font-weight: 700;
 }
 
-.formGroup input {
+.formGroup input,
+.formGroup select {
   width: 100%;
   padding: 16px;
   border: 1px solid #ddd;
@@ -149,8 +150,92 @@ textarea {
   font-size: 16px;
 }
 
-.formGroup input:focus {
+.formGroup textarea {
+  width: 100%;
+  min-height: 96px;
+  padding: 16px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  background: white;
+  outline: none;
+  resize: vertical;
+  font-size: 16px;
+}
+
+.formGroup input:focus,
+.formGroup select:focus {
   border-color: #111;
+}
+
+.formGroup textarea:focus {
+  border-color: #111;
+}
+
+.replanPanel {
+  margin-top: 38px;
+  padding: 24px;
+  border: 1px solid #e5e5e5;
+  border-radius: 14px;
+  background: #fff;
+}
+
+.replanPanel h2 {
+  margin: 0 0 10px;
+  font-size: 22px;
+}
+
+.replanDescription {
+  margin: 0 0 24px;
+  color: #666;
+  line-height: 1.6;
+}
+
+.replanForm {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.replanPlaceOptions {
+  display: grid;
+  gap: 8px;
+}
+
+.replanPlaceOption {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 12px;
+  border: 1px solid #e5e5e5;
+  border-radius: 10px;
+  cursor: pointer;
+  line-height: 1.5;
+}
+
+.replanPlaceOption input {
+  margin-top: 4px;
+}
+
+.replanStatus,
+.replanError {
+  margin: 18px 0 0;
+  padding: 14px;
+  border-radius: 10px;
+  line-height: 1.6;
+}
+
+.replanStatus {
+  background: #f7f7f7;
+  color: #555;
+}
+
+.replanError {
+  background: #fff1f0;
+  color: #a12622;
+}
+
+.replanPanel .generateButton {
+  margin-top: 0;
 }
 
 .formRow {
@@ -478,5 +563,9 @@ textarea {
 
   .tripConditions dl {
     grid-template-columns: 1fr;
+  }
+
+  .replanPanel {
+    padding: 18px;
   }
 }

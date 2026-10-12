@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { createSupabaseClient } from "@/lib/supabase";
+import ReplanForm from "./replan-form";
 
 export const dynamic = "force-dynamic";
 
@@ -117,6 +118,23 @@ export default async function ItineraryDetailPage({ params }: PageProps) {
                 <div><dt>원하는 활동</dt><dd>{trip.activities.join(", ")}</dd></div>
               </dl>
             </section>
+
+            <ReplanForm
+              tripId={trip.id}
+              remainingTime={trip.remaining_time}
+              budget={trip.budget}
+              activities={trip.activities}
+              items={items.map((item) => ({
+                id: item.id,
+                name: item.place_name,
+                address: item.address,
+                rating: item.rating ?? undefined,
+                userRatingCount: item.user_rating_count ?? undefined,
+                googleMapsUri: item.google_maps_uri ?? undefined,
+                duration: item.duration,
+                reason: item.reason,
+              }))}
+            />
 
             <section className="resultsSection">
               <h2>일정</h2>
