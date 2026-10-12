@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import type { Place } from "@/lib/google-places";
 import type { GeneratedItinerary } from "@/lib/gemini";
 
@@ -23,6 +24,7 @@ const activities = [
 ];
 
 export default function CreatePage() {
+  const router = useRouter();
   const [destination, setDestination] = useState("");
   const [remainingTime, setRemainingTime] = useState("3");
   const [budget, setBudget] = useState("");
@@ -123,6 +125,7 @@ export default function CreatePage() {
 
       setItinerary({ title: data.title, summary: data.summary, items: data.items });
       setTripId(data.tripId);
+      router.push(`/itinerary/${data.tripId}`);
     } catch (error) {
       setItineraryError(
         error instanceof Error
