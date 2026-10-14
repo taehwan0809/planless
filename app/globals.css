@@ -839,6 +839,9 @@ textarea {
 .authLinks a { color: var(--accent-strong); font-weight: 700; text-decoration: none; }
 .authLinks > a { justify-self: end; }
 .authError, .authSuccess { padding: 12px 13px; border: 1px solid #f0d7d4; border-radius: 8px; background: #fff6f5; color: var(--danger); font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+.authDiagnostic { color: #526168; font-size: 12px; line-height: 1.55; }
+.authDiagnostic summary { cursor: pointer; }
+.authDiagnostic code { display: block; margin-top: 7px; padding: 10px; border-radius: 6px; background: #f4f6f6; overflow-wrap: anywhere; white-space: normal; }
 .authSuccess { border-color: #d4e9e3; background: #f1f8f5; color: #28654b; }
 .authPublicNote { margin: 26px 0 0; color: #7a878d; font-size: 11px; text-align: center; }
 .authLoading { width: min(100%, 500px); margin: auto; padding: 30px; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--muted); text-align: center; }

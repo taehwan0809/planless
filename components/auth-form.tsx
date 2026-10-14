@@ -7,15 +7,35 @@ import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
 type AuthMode = "login" | "signup" | "forgot" | "reset";
 
-function friendlyAuthError(error: unknown) {
-  const message = error instanceof Error ? error.message.toLowerCase() : "";
-  if (message.includes("invalid login credentials")) return "이메일 또는 비밀번호를 확인해주세요.";
-  if (message.includes("email not confirmed")) return "이메일 인증을 완료한 뒤 로그인해주세요.";
-  if (message.includes("already registered") || message.includes("already been registered")) return "이미 가입된 이메일입니다. 로그인해주세요.";
-  if (message.includes("password should be at least") || message.includes("password is too short")) return "비밀번호를 8자 이상으로 입력해주세요.";
-  if (message.includes("provider is not enabled") || message.includes("unsupported provider")) return "Supabase 대시보드에서 Google 로그인을 먼저 설정해주세요.";
-  if (message.includes("redirect") || message.includes("flow state")) return "인증 주소 설정을 확인해주세요. 잠시 후 다시 시도해주세요.";
-  return "요청을 처리하지 못했습니다. 입력값과 Supabase 인증 설정을 확인한 뒤 다시 시도해주세요.";
+function safeAuthDiagnostic(error: unknown, stage: string) {
+  const value = error && typeof error === "object" ? error as Record<string, unknown> : {};
+  const code = typeof value.code === "string" ? value.code.slice(0, 80) : "unknown";
+  const rawStatus = typeof value.status === "number" ? value.status : value.statusCode;
+  const status = typeof rawStatus === "number" ? rawStatus : "n/a";
+  let message = typeof value.message === "string" ? value.message : "알 수 없는 오류";
+  message = message
+    .replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g, "[email]")
+    .replace(/https?:\/\/\S+/gi, "[url]")
+    .replace(/\b(?:Bearer\s+)?[A-Za-z0-9_-]{32,}\b/g, "[redacted]")
+    .slice(0, 240);
+  return { code, status, message, stage };
+}
+
+function friendlyAuthError(error: unknown, stage: string) {
+  const diagnostic = safeAuthDiagnostic(error, stage);
+  const message = diagnostic.message.toLowerCase();
+  if (diagnostic.code === "SUPABASE_CONFIG_MISSING") return { text: `배포 환경 설정이 누락되었습니다. ${diagnostic.message}`, diagnostic };
+  if (diagnostic.code === "SUPABASE_URL_INVALID") return { text: "Supabase 프로젝트 URL 설정을 확인해주세요.", diagnostic };
+  if (diagnostic.code === "invalid_credentials" || message.includes("invalid login credentials")) return { text: "이메일 또는 비밀번호를 확인해주세요.", diagnostic };
+  if (diagnostic.code === "email_not_confirmed" || message.includes("email not confirmed")) return { text: "이메일 인증을 완료한 뒤 로그인해주세요.", diagnostic };
+  if (message.includes("already registered") || message.includes("already been registered")) return { text: "이미 가입된 이메일입니다. 로그인해주세요.", diagnostic };
+  if (message.includes("password should be at least") || message.includes("password is too short")) return { text: "비밀번호를 8자 이상으로 입력해주세요.", diagnostic };
+  if (message.includes("provider is not enabled") || message.includes("unsupported provider")) return { text: "Supabase 대시보드에서 Google 로그인을 설정해주세요.", diagnostic };
+  if (message.includes("redirect") || message.includes("flow state")) return { text: "인증 주소 설정을 확인해주세요. 잠시 후 다시 시도해주세요.", diagnostic };
+  if (stage === "session-verification" || diagnostic.code.startsWith("AuthSession") || message.includes("session")) return { text: "로그인은 처리됐지만 세션 저장 또는 확인에 실패했습니다. 브라우저 쿠키 설정과 배포 도메인을 확인해주세요.", diagnostic };
+  if (diagnostic.status === 429) return { text: "로그인 시도가 많습니다. 잠시 후 다시 시도해주세요.", diagnostic };
+  if (message.includes("fetch") || message.includes("network")) return { text: "Supabase 서버에 연결할 수 없습니다. 배포 환경과 네트워크를 확인해주세요.", diagnostic };
+  return { text: "요청을 처리하지 못했습니다. 아래 진단 정보를 확인해주세요.", diagnostic };
 }
 
 export default function AuthForm({ mode }: { mode: AuthMode }) {
@@ -25,6 +45,7 @@ export default function AuthForm({ mode }: { mode: AuthMode }) {
   const [nextPath, setNextPath] = useState("/create");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [diagnostic, setDiagnostic] = useState("");
   const [message, setMessage] = useState("");
 
   useEffect(() => {
@@ -39,10 +60,13 @@ export default function AuthForm({ mode }: { mode: AuthMode }) {
     event.preventDefault();
     setBusy(true);
     setError("");
+    setDiagnostic("");
     setMessage("");
+    let failureStage = "client-init";
     try {
       const supabase = createSupabaseBrowserClient();
       if (mode === "signup") {
+        failureStage = "signup";
         const { data, error: authError } = await supabase.auth.signUp({
           email: email.trim(), password,
           options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}` },
@@ -55,17 +79,25 @@ export default function AuthForm({ mode }: { mode: AuthMode }) {
           router.refresh();
         }
       } else if (mode === "login") {
-        const { error: authError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
+        failureStage = "password-login";
+        const { data, error: authError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
         if (authError) throw authError;
+        if (!data.session) throw Object.assign(new Error("로그인 응답에 세션이 없습니다."), { code: "session_missing" });
+        failureStage = "session-verification";
+        const { data: userData, error: sessionError } = await supabase.auth.getUser();
+        if (sessionError) throw sessionError;
+        if (!userData.user) throw Object.assign(new Error("세션에서 사용자를 확인할 수 없습니다."), { code: "session_user_missing" });
         router.replace(nextPath);
         router.refresh();
       } else if (mode === "forgot") {
+        failureStage = "password-reset";
         const { error: authError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
           redirectTo: `${window.location.origin}/auth/callback?next=%2Fauth%2Freset-password`,
         });
         if (authError) throw authError;
         setMessage("비밀번호 재설정 링크를 이메일로 보냈습니다. 메일함을 확인해주세요.");
       } else {
+        failureStage = "password-update";
         const { error: authError } = await supabase.auth.updateUser({ password });
         if (authError) throw authError;
         setMessage("비밀번호를 변경했습니다. 로그인 상태를 확인하고 있어요.");
@@ -73,7 +105,10 @@ export default function AuthForm({ mode }: { mode: AuthMode }) {
         router.refresh();
       }
     } catch (authError) {
-      setError(friendlyAuthError(authError));
+      const result = friendlyAuthError(authError, failureStage);
+      console.warn("[PLANLESS auth]", result.diagnostic);
+      setError(result.text);
+      setDiagnostic(`단계: ${result.diagnostic.stage} · 코드: ${result.diagnostic.code} · HTTP: ${result.diagnostic.status} · 메시지: ${result.diagnostic.message}`);
     } finally {
       setBusy(false);
     }
@@ -82,6 +117,7 @@ export default function AuthForm({ mode }: { mode: AuthMode }) {
   const handleGoogle = async () => {
     setBusy(true);
     setError("");
+    setDiagnostic("");
     try {
       const { error: authError } = await createSupabaseBrowserClient().auth.signInWithOAuth({
         provider: "google",
@@ -89,7 +125,10 @@ export default function AuthForm({ mode }: { mode: AuthMode }) {
       });
       if (authError) throw authError;
     } catch (authError) {
-      setError(friendlyAuthError(authError));
+      const result = friendlyAuthError(authError, "google-oauth-init");
+      console.warn("[PLANLESS auth]", result.diagnostic);
+      setError(result.text);
+      setDiagnostic(`단계: ${result.diagnostic.stage} · 코드: ${result.diagnostic.code} · HTTP: ${result.diagnostic.status} · 메시지: ${result.diagnostic.message}`);
       setBusy(false);
     }
   };
@@ -117,15 +156,12 @@ export default function AuthForm({ mode }: { mode: AuthMode }) {
                   placeholder="8자 이상 입력해주세요" />
               </label>}
               {error && <p className="authError" role="alert">{error}</p>}
+              {diagnostic && <details className="authDiagnostic"><summary>안전 진단 정보</summary><code>{diagnostic}</code></details>}
               <button className="generateButton authSubmit" type="submit" disabled={busy}>
                 {busy ? "처리 중..." : mode === "login" ? "이메일로 로그인" : mode === "signup" ? "이메일로 가입" : mode === "forgot" ? "재설정 링크 보내기" : "비밀번호 변경"}
               </button>
             </form>
             {(mode === "login" || mode === "signup") && <>
-              <div className="authDivider"><span>또는</span></div>
-              <button className="googleButton" type="button" onClick={handleGoogle} disabled={busy}>
-                <span className="googleMark" aria-hidden="true">G</span> Google로 계속하기
-              </button>
             </>}
             <nav className="authLinks" aria-label="계정 도움말">
               {mode === "login" && <><Link href={`/auth/forgot-password?next=${encodeURIComponent(nextPath)}`}>비밀번호를 잊으셨나요?</Link><span>계정이 없으신가요? <Link href={`/auth/signup?next=${encodeURIComponent(nextPath)}`}>회원가입</Link></span></>}
