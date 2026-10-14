@@ -5,13 +5,14 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import type { Place } from "@/lib/google-places";
 import type { GeneratedItinerary } from "@/lib/gemini";
+import ItineraryMapLoader from "../itinerary/[id]/itinerary-map-loader";
 
 const situations = [
   "갑자기 비가 와요",
-  "원래 일정이 취소됐어요",
+  "가려던 곳이 문을 닫았어요",
   "생각보다 시간이 부족해요",
-  "일정에 여유가 생겼어요",
-  "새로운 장소를 찾고 싶어요",
+  "예산을 줄이고 싶어요",
+  "주변에서 다른 곳을 찾고 싶어요",
 ];
 
 const activities = [
@@ -32,6 +33,8 @@ export default function CreatePage() {
   const [situation, setSituation] = useState("");
   const [selectedActivities, setSelectedActivities] = useState<string[]>([]);
   const [places, setPlaces] = useState<Place[]>([]);
+  const [selectedPlaceKeys, setSelectedPlaceKeys] = useState<string[]>([]);
+  const [activePlaceKey, setActivePlaceKey] = useState<string | null>(null);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState("");
   const [hasSearched, setHasSearched] = useState(false);
@@ -53,6 +56,8 @@ export default function CreatePage() {
     setIsSearching(true);
     setSearchError("");
     setPlaces([]);
+      setSelectedPlaceKeys([]);
+      setActivePlaceKey(null);
     setHasSearched(false);
     setItinerary(null);
     setTripId(null);
@@ -84,6 +89,7 @@ export default function CreatePage() {
         uniquePlaces.set(`${place.name}|${place.address}`, place);
       });
       setPlaces(Array.from(uniquePlaces.values()));
+      setSelectedPlaceKeys([]);
       setHasSearched(true);
     } catch (error) {
       setSearchError(
@@ -94,6 +100,20 @@ export default function CreatePage() {
     } finally {
       setIsSearching(false);
     }
+  };
+
+  const placeKey = (place: Place) => `${place.name}|${place.address}`;
+  const mappedPlaces = places.map((place) => ({
+    ...place,
+    id: place.id || encodeURIComponent(placeKey(place)),
+    duration: 0,
+    reason: "",
+  }));
+  const togglePlace = (place: Place) => {
+    const key = placeKey(place);
+    setSelectedPlaceKeys((current) => current.includes(key)
+      ? current.filter((item) => item !== key)
+      : [...current, key]);
   };
 
   const handleGenerateItinerary = async () => {
@@ -113,7 +133,9 @@ export default function CreatePage() {
           people,
           situation,
           activities: selectedActivities,
-          places,
+          places: selectedPlaceKeys.length
+            ? places.filter((place) => selectedPlaceKeys.includes(placeKey(place)))
+            : places,
         }),
       });
       const data: GeneratedItinerary & { tripId?: string; error?: string } =
@@ -216,7 +238,7 @@ export default function CreatePage() {
           </div>
 
           <div className="formGroup">
-            <label>현재 상황</label>
+            <span className="fieldLabel">현재 상황</span>
 
             <div className="optionGrid">
               {situations.map((item) => (
@@ -226,6 +248,7 @@ export default function CreatePage() {
                   className={`optionButton ${
                     situation === item ? "selected" : ""
                   }`}
+                  aria-pressed={situation === item}
                   onClick={() => setSituation(item)}
                 >
                   {item}
@@ -235,7 +258,7 @@ export default function CreatePage() {
           </div>
 
           <div className="formGroup">
-            <label>원하는 활동</label>
+            <span className="fieldLabel">원하는 활동</span>
 
             <div className="optionGrid">
               {activities.map((activity) => (
@@ -245,6 +268,7 @@ export default function CreatePage() {
                   className={`optionButton ${
                     selectedActivities.includes(activity) ? "selected" : ""
                   }`}
+                  aria-pressed={selectedActivities.includes(activity)}
                   onClick={() => toggleActivity(activity)}
                 >
                   {activity}
@@ -258,7 +282,7 @@ export default function CreatePage() {
             className="generateButton"
             disabled={!situation || selectedActivities.length === 0 || isSearching}
           >
-            {isSearching ? "주변 장소를 찾고 있어요..." : "일정 생성하기 →"}
+            {isSearching ? "장소를 찾고 있어요..." : "장소 검색하기 →"}
           </button>
         </form>
 
@@ -276,28 +300,41 @@ export default function CreatePage() {
 
         {hasSearched && (
           <section className="resultsSection" aria-live="polite">
-            <h2>검색된 장소</h2>
+            <div className="resultsHeading"><div><p className="step">STEP 02</p><h2>장소를 살펴보세요</h2></div>
+              {places.length > 0 && <p>선택한 장소가 있으면 해당 후보를 우선 사용해요.</p>}</div>
             {places.length === 0 ? (
               <p className="emptyResults">조건에 맞는 장소를 찾지 못했어요.</p>
             ) : (
-              <ul className="placeList">
-                {places.map((place) => (
-                  <li className="placeItem" key={`${place.name}|${place.address}`}>
-                    <h3>{place.name}</h3>
-                    <p>{place.address}</p>
-                    <p className="placeMeta">
-                      {place.rating !== undefined ? `평점 ${place.rating}` : "평점 정보 없음"}
-                      {place.userRatingCount !== undefined &&
-                        ` · 리뷰 ${place.userRatingCount.toLocaleString()}개`}
-                    </p>
-                    {place.googleMapsUri && (
-                      <a href={place.googleMapsUri} target="_blank" rel="noreferrer">
-                        Google Maps에서 보기 ↗
-                      </a>
-                    )}
-                  </li>
-                ))}
-              </ul>
+              <div className="searchResultsLayout">
+                <div className="searchResultsMap">
+                  <ItineraryMapLoader items={mappedPlaces} nearbyPlaces={[]} currentPosition={null}
+                    activeKey={activePlaceKey} onSelect={setActivePlaceKey} />
+                </div>
+                <ul className="placeList searchPlaceList">
+                  {places.map((place) => {
+                    const key = placeKey(place);
+                    const mapKey = `itinerary:${place.id || encodeURIComponent(key)}`;
+                    const selected = selectedPlaceKeys.includes(key);
+                    return <li className={`placeItem ${activePlaceKey === mapKey ? "activePlace" : ""}`} key={key}>
+                      <button type="button" className="placeFocusButton" onClick={() => setActivePlaceKey(mapKey)}>
+                        <span><strong>{place.name}</strong><small>{place.address}</small></span>
+                        <span className="placeFocusHint">지도에서 보기</span>
+                      </button>
+                      <p className="placeMeta">
+                        {place.rating !== undefined ? `평점 ${place.rating}` : "평점 정보 없음"}
+                        {place.userRatingCount !== undefined && ` · 리뷰 ${place.userRatingCount.toLocaleString()}개`}
+                      </p>
+                      <div className="placeCardActions">
+                        {place.googleMapsUri && <a href={place.googleMapsUri} target="_blank" rel="noreferrer">Google Maps ↗</a>}
+                        <button type="button" className={`candidateButton ${selected ? "selected" : ""}`}
+                          aria-pressed={selected} onClick={() => togglePlace(place)}>
+                          {selected ? "후보 선택됨" : "후보로 선택"}
+                        </button>
+                      </div>
+                    </li>;
+                  })}
+                </ul>
+              </div>
             )}
             {places.length > 0 && (
               <button

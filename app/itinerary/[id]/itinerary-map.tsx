@@ -118,8 +118,8 @@ export default function ItineraryMap({
               icon={numberedIcon(index + 1)} eventHandlers={{ click: () => onSelect(`itinerary:${item.id}`) }}>
               <Popup>
                 <strong>{index + 1}. {item.name}</strong><br />
-                {item.address}<br />
-                예상 체류 {item.duration}분
+                {item.address}
+                {item.duration > 0 && <><br />예상 체류 {item.duration}분</>}
               </Popup>
             </Marker>
           ) : null

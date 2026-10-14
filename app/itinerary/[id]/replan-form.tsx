@@ -136,7 +136,7 @@ export default function ReplanForm({ tripId, remainingTime, budget, activities, 
     <>
     <section className="itineraryMapSection" aria-labelledby="map-heading">
       <h2 id="map-heading">여행 지도</h2>
-      <p className="replanDescription">장소와 현재 위치를 지도에서 확인할 수 있습니다. 위치는 브라우저에서만 유지됩니다.</p>
+      <p className="replanDescription">여행 장소와 주변 후보를 함께 확인하세요. 현재 위치는 지도 이동과 주변 검색에만 쓰이며 저장되지 않습니다.</p>
       <div className="locationToolbar">
         <button className="optionButton" type="button" onClick={requestLocation}>
           {currentPosition ? "현재 위치 새로고침" : "내 위치 사용"}
@@ -172,18 +172,23 @@ export default function ReplanForm({ tripId, remainingTime, budget, activities, 
         </button>
       </div>
       {nearbyError && <p className="replanError" role="alert">{nearbyError}</p>}
-      <ItineraryMapLoader items={items} nearbyPlaces={nearbyPlaces} currentPosition={currentPosition}
-        activeKey={activeMapKey} onSelect={setActiveMapKey} />
-      <div className="itineraryMapLegend" aria-label="지도 마커 안내">
-        <span><i className="mapLegendNumber">1</i> 일정 순서</span>
-        <span><i className="mapLegendNearby">+</i> 주변 장소 후보</span>
-        <span><i className="mapLegendCurrent" /> 내 위치</span>
+      <div className="itineraryWorkspace">
+      <div className="mapPane">
+        <ItineraryMapLoader items={items} nearbyPlaces={nearbyPlaces} currentPosition={currentPosition}
+          activeKey={activeMapKey} onSelect={setActiveMapKey} />
+        <div className="itineraryMapLegend" aria-label="지도 마커 안내">
+          <span><i className="mapLegendNumber">1</i> 일정 순서</span>
+          <span><i className="mapLegendNearby">+</i> 주변 장소 후보</span>
+          <span><i className="mapLegendCurrent" /> 내 위치</span>
+        </div>
       </div>
+      <div className="itineraryPlacePanels">
       <h3 className="mapListHeading">현재 일정</h3>
       <ol className="placeList itineraryList mapPlaceList">
         {items.map((item, index) => (
-          <li className="placeItem itineraryItem" key={item.id}>
+          <li className={`placeItem itineraryItem ${activeMapKey === `itinerary:${item.id}` ? "activePlace" : ""}`} key={item.id}>
             <button type="button" className="mapPlaceSelect"
+              aria-pressed={activeMapKey === `itinerary:${item.id}`}
               onClick={() => setActiveMapKey(`itinerary:${item.id}`)}>
               <span className="mapListNumber">{String(index + 1).padStart(2, "0")}</span>
               <span><strong>{item.name}</strong><small>{item.address}</small>
@@ -198,8 +203,9 @@ export default function ReplanForm({ tripId, remainingTime, budget, activities, 
           <h3 className="mapListHeading">현재 위치 주변 장소</h3>
           <ul className="placeList nearbyPlaceList">
             {nearbyPlaces.map((place) => (
-              <li className="placeItem" key={place.id ?? `${place.name}|${place.address}`}>
+              <li className={`placeItem ${activeMapKey === `nearby:${place.id}` ? "activePlace" : ""}`} key={place.id ?? `${place.name}|${place.address}`}>
                 <button type="button" className="mapPlaceSelect"
+                  aria-pressed={activeMapKey === `nearby:${place.id}`}
                   onClick={() => setActiveMapKey(`nearby:${place.id}`)}>
                   <span className="mapListNumber mapListNumberNearby">+</span>
                   <span><strong>{place.name}</strong><small>{place.address}</small>
@@ -217,10 +223,13 @@ export default function ReplanForm({ tripId, remainingTime, budget, activities, 
           </ul>
         </>
       )}
+      </div>
+      </div>
     </section>
 
     <section className="replanPanel" aria-labelledby="replan-heading">
-      <h2 id="replan-heading">일정 다시 만들기</h2>
+      <p className="step">PLAN B</p>
+      <h2 id="replan-heading">여행 중 문제가 생겼나요?</h2>
       <p className="replanDescription">변경 사유와 바꿀 장소를 알려주면 기존 일정에서 필요한 부분만 다시 구성합니다.</p>
       <form className="replanForm" onSubmit={handleSubmit}>
         <div className="formGroup">
