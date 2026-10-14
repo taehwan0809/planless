@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { generateItinerary, type TripConditions } from "@/lib/gemini";
 import type { Place } from "@/lib/google-places";
-import { createSupabaseClient } from "@/lib/supabase";
+import { getAuthenticatedUser } from "@/lib/supabase";
 
 function isNonEmptyString(value: unknown): value is string {
   return typeof value === "string" && value.trim().length > 0;
@@ -16,7 +16,8 @@ export async function POST(request: NextRequest) {
     }
 
     const input = body as Record<string, unknown>;
-    const { destination, situation } = input;
+    const destination = input.destination;
+    const situation = typeof input.situation === "string" ? input.situation.trim().slice(0, 1000) : "특별한 상황 없음";
     const remainingTime = Number(input.remainingTime);
     const budget = Number(input.budget);
     const people = Number(input.people);
@@ -25,12 +26,13 @@ export async function POST(request: NextRequest) {
 
     if (
       !isNonEmptyString(destination) ||
-      !isNonEmptyString(situation) ||
+      destination.trim().length > 120 ||
+      (input.situation !== undefined && typeof input.situation !== "string") ||
       !Number.isInteger(remainingTime) || remainingTime < 1 || remainingTime > 24 ||
       !Number.isInteger(budget) || budget < 0 ||
       !Number.isInteger(people) || people < 1 || people > 20 ||
-      !Array.isArray(activities) || activities.length === 0 ||
-      !activities.every(isNonEmptyString) ||
+      !Array.isArray(activities) || activities.length > 25 ||
+      !activities.every((activity: unknown) => isNonEmptyString(activity) && activity.trim().length <= 800) ||
       !Array.isArray(places) || places.length === 0 || places.length > 30 ||
       !places.every(
         (place: unknown) =>
@@ -55,13 +57,17 @@ export async function POST(request: NextRequest) {
       activities,
     };
 
-    const supabase = createSupabaseClient();
+    const { supabase, user } = await getAuthenticatedUser();
+    if (!user) {
+      return NextResponse.json({ error: "일정을 저장하려면 로그인해주세요.", code: "AUTH_REQUIRED" }, { status: 401 });
+    }
     stage = "gemini";
     const itinerary = await generateItinerary(conditions, places as Place[]);
     stage = "trip-save";
     const { data: trip, error: tripError } = await supabase
       .from("trips")
       .insert({
+        user_id: user.id,
         destination,
         remaining_time: remainingTime,
         budget,

@@ -1,7 +1,10 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { createSupabaseClient } from "@/lib/supabase";
 import { searchPlaces } from "@/lib/google-places";
 import ReplanForm from "./replan-form";
+import AccountControl from "@/components/account-control";
+import { decodeActivities } from "@/lib/trip-preferences";
 
 export const dynamic = "force-dynamic";
 
@@ -36,6 +39,9 @@ type PageProps = { params: Promise<{ id: string }> };
 
 export default async function ItineraryDetailPage({ params }: PageProps) {
   const { id } = await params;
+  const supabase = await createSupabaseClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) redirect(`/auth/login?next=${encodeURIComponent(`/itinerary/${id}`)}`);
   let trip: TripRecord | null = null;
   let items: ItineraryRecord[] = [];
   let errorMessage = "";
@@ -44,11 +50,11 @@ export default async function ItineraryDetailPage({ params }: PageProps) {
     errorMessage = "일정을 찾을 수 없습니다.";
   } else {
     try {
-      const supabase = createSupabaseClient();
       const { data: tripData, error: tripError } = await supabase
         .from("trips")
         .select("id, destination, remaining_time, budget, people, situation, activities, title, summary, created_at")
         .eq("id", id)
+        .eq("user_id", user.id)
         .maybeSingle();
 
       if (tripError) {
@@ -97,6 +103,8 @@ export default async function ItineraryDetailPage({ params }: PageProps) {
     }
   }
 
+  const activityPreferences = trip ? decodeActivities(trip.activities) : null;
+
   return (
     <main className="createPage">
       <div className="createContainer">
@@ -104,6 +112,7 @@ export default async function ItineraryDetailPage({ params }: PageProps) {
           <Link className="backLink" href="/">PLANLESS</Link>
           <Link href="/create">새 일정</Link>
           <Link href="/history">기록</Link>
+          <AccountControl />
         </nav>
 
         {errorMessage ? (
@@ -136,12 +145,17 @@ export default async function ItineraryDetailPage({ params }: PageProps) {
                 <div><dt>예산</dt><dd>{trip.budget.toLocaleString()}원</dd></div>
                 <div><dt>인원</dt><dd>{trip.people}명</dd></div>
                 <div><dt>현재 상황</dt><dd>{trip.situation}</dd></div>
-                <div><dt>원하는 활동</dt><dd>{trip.activities.join(", ")}</dd></div>
+                <div><dt>원하는 활동</dt><dd>{activityPreferences && [
+                  ...(activityPreferences.required.length ? [`꼭: ${activityPreferences.required.join(", ")}`] : []),
+                  ...(activityPreferences.preferred.length ? [`가능하면: ${activityPreferences.preferred.join(", ")}`] : []),
+                  ...(activityPreferences.request ? [`추가 요청: ${activityPreferences.request}`] : []),
+                ].join(" · ") || "AI가 여행 조건에 맞춰 추천"}</dd></div>
               </dl>
             </section>
 
             <ReplanForm
               tripId={trip.id}
+              situation={trip.situation}
               remainingTime={trip.remaining_time}
               budget={trip.budget}
               activities={trip.activities}

@@ -6,11 +6,13 @@ import type { FormEvent } from "react";
 import type { ItineraryItem } from "@/lib/gemini";
 import type { Coordinates, NearbySearchCategory, Place } from "@/lib/google-places";
 import ItineraryMapLoader from "./itinerary-map-loader";
+import { activityOptions, decodeActivities, decodeSituations, encodeActivities, encodeSituations, situationOptions } from "@/lib/trip-preferences";
 
 type ExistingPlace = ItineraryItem & { id: string };
 type NearbyCategory = NearbySearchCategory;
 type ReplanFormProps = {
   tripId: string;
+  situation: string;
   remainingTime: number;
   budget: number;
   activities: string[];
@@ -25,16 +27,22 @@ const reasons = [
   "예산이 변경됐어요",
   "다른 종류의 활동을 하고 싶어요",
 ];
-const activityOptions = ["관광", "카페", "맛집", "쇼핑", "체험", "산책"];
+const replanActivityOptions = activityOptions;
 
-export default function ReplanForm({ tripId, remainingTime, budget, activities, items }: ReplanFormProps) {
+export default function ReplanForm({ tripId, situation, remainingTime, budget, activities, items }: ReplanFormProps) {
   const router = useRouter();
+  const initialPreferences = decodeActivities(activities);
+  const initialSituation = decodeSituations(situation);
   const [reason, setReason] = useState("");
   const [details, setDetails] = useState("");
   const [replacePlaceIds, setReplacePlaceIds] = useState<string[]>([]);
   const [updatedTime, setUpdatedTime] = useState(String(remainingTime));
   const [updatedBudget, setUpdatedBudget] = useState(String(budget));
-  const [selectedActivities, setSelectedActivities] = useState(activities);
+  const [selectedActivities, setSelectedActivities] = useState([...initialPreferences.required, ...initialPreferences.preferred]);
+  const [mustDoActivities, setMustDoActivities] = useState(initialPreferences.required);
+  const [activityRequest, setActivityRequest] = useState(initialPreferences.request);
+  const [selectedSituations, setSelectedSituations] = useState(initialSituation.selected);
+  const [situationDetails, setSituationDetails] = useState(initialSituation.details);
   const [currentPosition, setCurrentPosition] = useState<Coordinates | null>(null);
   const [nearbyCategory, setNearbyCategory] = useState<NearbyCategory>("tourist_attraction");
   const [nearbyRadius, setNearbyRadius] = useState(1500);
@@ -46,9 +54,18 @@ export default function ReplanForm({ tripId, remainingTime, budget, activities, 
   const [isSearchingNearby, setIsSearchingNearby] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const availableActivityOptions = [...new Set([...replanActivityOptions, ...selectedActivities])];
 
   const toggleValue = (value: string, values: string[], setter: (next: string[]) => void) => {
     setter(values.includes(value) ? values.filter((item) => item !== value) : [...values, value]);
+  };
+  const toggleActivity = (activity: string) => {
+    const removing = selectedActivities.includes(activity);
+    setSelectedActivities((current) => removing ? current.filter((item) => item !== activity) : [...current, activity]);
+    if (removing) setMustDoActivities((current) => current.filter((item) => item !== activity));
+  };
+  const toggleSituation = (value: string) => {
+    setSelectedSituations((current) => current.includes(value) ? current.filter((item) => item !== value) : [...current, value]);
   };
 
   const requestLocation = () => {
@@ -111,7 +128,9 @@ export default function ReplanForm({ tripId, remainingTime, budget, activities, 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           tripId, reason, details, replacePlaceIds,
-          remainingTime: updatedTime, budget: updatedBudget, activities: selectedActivities,
+          remainingTime: updatedTime, budget: updatedBudget,
+          activities: encodeActivities(mustDoActivities, selectedActivities, activityRequest),
+          situation: encodeSituations(selectedSituations, situationDetails) || "특별한 상황 없음",
           currentLocation: currentPosition,
           nearbyCategory,
           nearbyRadius,
@@ -119,6 +138,10 @@ export default function ReplanForm({ tripId, remainingTime, budget, activities, 
         }),
       });
       const data: { tripId?: string; error?: string } = await response.json();
+      if (response.status === 401) {
+        router.replace(`/auth/login?next=${encodeURIComponent(window.location.pathname)}`);
+        return;
+      }
       if (!response.ok || !data.tripId) {
         throw new Error(data.error || "일정 재구성에 실패했습니다.");
       }
@@ -233,6 +256,18 @@ export default function ReplanForm({ tripId, remainingTime, budget, activities, 
       <p className="replanDescription">변경 사유와 바꿀 장소를 알려주면 기존 일정에서 필요한 부분만 다시 구성합니다.</p>
       <form className="replanForm" onSubmit={handleSubmit}>
         <div className="formGroup">
+          <span className="fieldLabel">현재 상황 (모두 선택 가능)</span>
+          <div className="preferenceChipGrid">
+            {situationOptions.map((item) => <button type="button" key={item}
+              className={`preferenceChip ${selectedSituations.includes(item) ? "selected" : ""}`}
+              aria-pressed={selectedSituations.includes(item)} onClick={() => toggleSituation(item)}>{item}</button>)}
+          </div>
+          <label htmlFor="replan-situation-details" className="fieldLabel">상황 직접 입력 (선택)</label>
+          <textarea id="replan-situation-details" rows={3} maxLength={500} value={situationDetails}
+            onChange={(event) => setSituationDetails(event.target.value)}
+            placeholder="현재 겪는 상황을 AI가 참고할 수 있도록 적어주세요." />
+        </div>
+        <div className="formGroup">
           <label htmlFor="replan-reason">변경 사유</label>
           <select id="replan-reason" value={reason} onChange={(event) => setReason(event.target.value)} required>
             <option value="">변경 사유를 선택하세요</option>
@@ -277,20 +312,35 @@ export default function ReplanForm({ tripId, remainingTime, budget, activities, 
           </div>
         </div>
         <div className="formGroup">
-          <label>원하는 활동</label>
-          <div className="optionGrid">
-            {activityOptions.map((activity) => (
+          <span className="fieldLabel">원하는 활동 (선택)</span>
+          <p className="fieldHint">선택하지 않으면 현재 상황과 장소를 바탕으로 추천합니다.</p>
+          <div className="preferenceChipGrid">
+            {availableActivityOptions.map((activity) => (
               <button type="button" key={activity}
-                className={`optionButton ${selectedActivities.includes(activity) ? "selected" : ""}`}
-                aria-pressed={selectedActivities.includes(activity)}
-                onClick={() => toggleValue(activity, selectedActivities, setSelectedActivities)}>
-                {activity}
+                className={`preferenceChip ${selectedActivities.includes(activity) ? "selected" : ""}`}
+                aria-pressed={selectedActivities.includes(activity)} onClick={() => toggleActivity(activity)}>
+                {activity}{selectedActivities.includes(activity) && <small>{mustDoActivities.includes(activity) ? "꼭" : "가능하면"}</small>}
               </button>
             ))}
           </div>
+          {selectedActivities.length > 0 && <div className="priorityEditor" aria-label="활동 우선순위">
+            <span className="fieldHint">선택한 활동의 우선순위</span>
+            {selectedActivities.map((activity) => <label key={activity}><span>{activity}</span>
+              <select aria-label={`${activity} 우선순위`} value={mustDoActivities.includes(activity) ? "must" : "prefer"}
+                onChange={(event) => setMustDoActivities((current) => event.target.value === "must"
+                  ? [...current.filter((item) => item !== activity), activity]
+                  : current.filter((item) => item !== activity))}>
+                <option value="must">꼭 하고 싶어요</option><option value="prefer">가능하면 하고 싶어요</option>
+              </select>
+            </label>)}
+          </div>}
+          <label htmlFor="replan-activity-request" className="fieldLabel">원하는 활동 직접 입력 (선택)</label>
+          <textarea id="replan-activity-request" rows={3} maxLength={700} value={activityRequest}
+            onChange={(event) => setActivityRequest(event.target.value)}
+            placeholder="구체적인 취향이나 여러 요청을 적어주세요." />
         </div>
         <button className="generateButton" type="submit"
-          disabled={isSubmitting || !reason || selectedActivities.length === 0}>
+          disabled={isSubmitting || !reason}>
           {isSubmitting ? "새 일정을 구성하고 있어요..." : "일정 다시 만들기 →"}
         </button>
       </form>

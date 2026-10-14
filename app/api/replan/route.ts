@@ -7,13 +7,13 @@ import {
   type NearbySearchCategory,
   type Place,
 } from "@/lib/google-places";
-import { createSupabaseClient } from "@/lib/supabase";
+import { getAuthenticatedUser } from "@/lib/supabase";
+import { activitySearchTerms } from "@/lib/trip-preferences";
 
 const validReasons = [
   "갑자기 비가 와요", "방문하려던 장소가 문을 닫았어요", "예상보다 시간이 부족해요",
   "시간이 더 남았어요", "예산이 변경됐어요", "다른 종류의 활동을 하고 싶어요",
 ];
-const validActivities = ["관광", "카페", "맛집", "쇼핑", "체험", "산책"];
 const nearbyCategories: NearbySearchCategory[] = ["tourist_attraction", "indoor", "cafe", "restaurant"];
 const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 type TripRecord = {
@@ -27,14 +27,14 @@ type ItineraryRecord = {
   latitude: number | null; longitude: number | null;
 };
 function isStringArray(value: unknown): value is string[] {
-  return Array.isArray(value) && value.length > 0 &&
-    value.every((item) => typeof item === "string" && item.trim().length > 0);
+  return Array.isArray(value) && value.length <= 25 &&
+    value.every((item) => typeof item === "string" && item.trim().length > 0 && item.length <= 800);
 }
 function safeError(error: unknown, message: string) {
   console.error(message, error);
   return NextResponse.json({ error: message }, { status: 500 });
 }
-async function rollbackNewTrip(supabase: ReturnType<typeof createSupabaseClient>, id: string) {
+async function rollbackNewTrip(supabase: Awaited<ReturnType<typeof getAuthenticatedUser>>["supabase"], id: string) {
   try {
     const { error } = await supabase.from("trips").delete().eq("id", id);
     if (error) console.error("Replanned trip rollback error:", error);
@@ -58,6 +58,7 @@ export async function POST(request: NextRequest) {
   const tripId = input.tripId;
   const reason = input.reason;
   const details = typeof input.details === "string" ? input.details.trim().slice(0, 500) : "";
+  const requestedSituation = typeof input.situation === "string" ? input.situation.trim().slice(0, 1000) : "";
   const remainingTime = Number(input.remainingTime);
   const budget = Number(input.budget);
   const activities = input.activities;
@@ -90,8 +91,7 @@ export async function POST(request: NextRequest) {
   if (
     !Number.isInteger(remainingTime) || remainingTime < 1 || remainingTime > 24 ||
     !Number.isInteger(budget) || budget < 0 || !isStringArray(activities) ||
-    activities.length > validActivities.length ||
-    !activities.every((activity) => validActivities.includes(activity)) ||
+    (input.situation !== undefined && typeof input.situation !== "string") ||
     !Array.isArray(replacePlaceIds) ||
     !replacePlaceIds.every((id) => typeof id === "string" && uuidPattern.test(id)) ||
     !Array.isArray(nearbyPlaceIds) || nearbyPlaceIds.length > 20 ||
@@ -106,8 +106,14 @@ export async function POST(request: NextRequest) {
   }
 
   let supabase;
+  let authenticatedUserId = "";
   try {
-    supabase = createSupabaseClient();
+    const auth = await getAuthenticatedUser();
+    if (!auth.user) {
+      return NextResponse.json({ error: "일정을 재구성하려면 로그인해주세요.", code: "AUTH_REQUIRED" }, { status: 401 });
+    }
+    supabase = auth.supabase;
+    authenticatedUserId = auth.user.id;
   } catch {
     return NextResponse.json({ error: "Supabase 연결 설정을 확인해주세요." }, { status: 500 });
   }
@@ -116,7 +122,7 @@ export async function POST(request: NextRequest) {
   try {
     const { data: tripData, error: tripError } = await supabase.from("trips")
       .select("id, destination, remaining_time, budget, people, situation, activities, title, summary")
-      .eq("id", tripId).maybeSingle();
+      .eq("id", tripId).eq("user_id", authenticatedUserId).maybeSingle();
     if (tripError) return safeError(tripError, "기존 여행 기록을 불러오지 못했습니다.");
     if (!tripData) return NextResponse.json({ error: "기존 일정을 찾을 수 없습니다." }, { status: 404 });
     trip = tripData as TripRecord;
@@ -139,11 +145,14 @@ export async function POST(request: NextRequest) {
 
   const conditions: TripConditions = {
     destination: trip.destination, remainingTime, budget, people: trip.people,
-    situation: details ? `${reason}: ${details}` : reason, activities,
+    situation: [requestedSituation || trip.situation, reason, details].filter(Boolean).join(" · "), activities,
   };
-  const queries = reason === "갑자기 비가 와요"
-    ? [`${trip.destination} 실내 관광`, ...activities.slice(0, 2).map((activity) => `${trip.destination} ${activity}`)]
-    : activities.slice(0, 3).map((activity) => `${trip.destination} ${activity}`);
+  const activityTerms = activitySearchTerms(activities);
+  const queryTerms = reason === "갑자기 비가 와요" || /비 또는 악천후|갑자기 비|날씨가 나쁘/.test(requestedSituation)
+    ? ["실내 장소", ...activityTerms]
+    : activityTerms;
+  const queries = (queryTerms.length ? queryTerms : ["관광 명소"])
+    .map((term) => `${trip.destination} ${term}`).slice(0, 3);
   const uniqueQueries = [...new Set(queries)].slice(0, 3);
   let searchResults: Place[] = [];
   try {
@@ -230,6 +239,7 @@ export async function POST(request: NextRequest) {
   let newTrip: { id: string };
   try {
     const { data, error } = await supabase.from("trips").insert({
+      user_id: authenticatedUserId,
       destination: trip.destination, remaining_time: remainingTime, budget,
       people: trip.people, situation: conditions.situation, activities,
       title: itinerary.title, summary: itinerary.summary,

@@ -818,8 +818,48 @@ textarea {
 .itineraryMapCanvas, .itineraryMapLoading { border-color: var(--border); border-radius: 9px; }
 .itineraryMapSection > h2, .replanPanel h2 { color: var(--foreground); }
 .nearbyCandidateToggle { color: var(--accent-strong); }
+.authPage { display: grid; min-height: 100svh; place-items: center; padding: 28px 18px; background: var(--background); }
+.authCard { width: min(100%, 440px); padding: clamp(24px, 6vw, 42px); border: 1px solid var(--border); border-radius: 12px; background: #fff; box-shadow: var(--shadow); }
+.authBrand { display: inline-flex; flex-direction: column; gap: 4px; margin-bottom: 36px; color: var(--foreground); font-size: 16px; font-weight: 800; letter-spacing: .14em; text-decoration: none; }
+.authBrand span { color: var(--muted); font-size: 11px; font-weight: 500; letter-spacing: 0; }
+.authCard > .step { margin-bottom: 8px; font-size: 11px; }
+.authCard h1 { margin: 0; font-size: clamp(27px, 7vw, 34px); letter-spacing: -.04em; }
+.authDescription { margin: 10px 0 26px; color: var(--muted); font-size: 14px; }
+.authForm { display: grid; gap: 17px; }
+.authForm .formGroup { gap: 8px; }
+.authForm input { min-height: 48px; padding: 12px 14px; border: 1px solid var(--border); border-radius: 8px; }
+.authSubmit { width: 100%; min-height: 48px; margin: 4px 0 0; }
+.authSubmit:disabled, .googleButton:disabled { opacity: .65; cursor: wait; }
+.authDivider { display: flex; align-items: center; gap: 12px; margin: 20px 0 14px; color: #88949a; font-size: 12px; }
+.authDivider::before, .authDivider::after { height: 1px; flex: 1; background: var(--border); content: ""; }
+.googleButton { display: flex; width: 100%; min-height: 46px; align-items: center; justify-content: center; gap: 10px; border: 1px solid var(--border); border-radius: 8px; background: white; color: var(--foreground); cursor: pointer; font-size: 14px; font-weight: 700; }
+.googleButton:hover { border-color: #9baeb0; background: #fbfdfd; }
+.googleMark { color: #4285f4; font-size: 17px; font-weight: 800; }
+.authLinks { display: grid; justify-items: center; gap: 14px; margin-top: 21px; color: var(--muted); font-size: 13px; text-align: center; }
+.authLinks a { color: var(--accent-strong); font-weight: 700; text-decoration: none; }
+.authLinks > a { justify-self: end; }
+.authError, .authSuccess { padding: 12px 13px; border: 1px solid #f0d7d4; border-radius: 8px; background: #fff6f5; color: var(--danger); font-size: 13px; line-height: 1.55; overflow-wrap: anywhere; }
+.authSuccess { border-color: #d4e9e3; background: #f1f8f5; color: #28654b; }
+.authPublicNote { margin: 26px 0 0; color: #7a878d; font-size: 11px; text-align: center; }
+.authLoading { width: min(100%, 500px); margin: auto; padding: 30px; border: 1px solid var(--border); border-radius: 10px; background: #fff; color: var(--muted); text-align: center; }
+.accountLink, .accountControl button { color: var(--accent-strong); font-size: 13px; font-weight: 700; text-decoration: none; }
+.accountControl { display: inline-flex; align-items: center; gap: 10px; color: var(--muted); font-size: 12px; }
+.accountControl span { max-width: 170px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.accountControl button { padding: 7px 9px; border: 1px solid var(--border); border-radius: 7px; background: #fff; cursor: pointer; }
+.createAccount { display: flex; justify-content: flex-end; margin-top: -30px; }
 .detailHeader { padding-bottom: 20px; border-bottom: 1px solid var(--border); }
 .fieldLabel { color: #34434a; font-size: 15px; font-weight: 700; }
+.fieldHint { margin: -3px 0 2px; color: var(--muted); font-size: 13px; line-height: 1.55; }
+.preferenceChipGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 9px; }
+.preferenceChip { display: flex; min-height: 44px; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: #fff; color: #435158; cursor: pointer; font-size: 13px; text-align: left; transition: border-color .16s ease, background .16s ease, color .16s ease; }
+.preferenceChip:hover { border-color: #8ab7b8; background: #f7fbfa; }
+.preferenceChip.selected { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-strong); font-weight: 700; }
+.preferenceChip small { flex: 0 0 auto; color: var(--accent-strong); font-size: 10px; font-weight: 700; }
+.priorityEditor { display: grid; gap: 8px; padding: 12px; border: 1px solid #e7eded; border-radius: 8px; background: #f9fbfb; }
+.priorityEditor > label { display: flex; align-items: center; justify-content: space-between; gap: 12px; font-size: 13px; }
+.priorityEditor select { width: auto; min-width: 150px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 7px; background: white; color: var(--foreground); }
+.formGroup textarea { border-color: var(--border); border-radius: 8px; color: var(--foreground); }
+.formGroup textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px #147d8618; }
 .resultsHeading { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; margin-bottom: 18px; }
 .resultsHeading h2 { margin: 0; color: var(--foreground); font-size: 24px; }
 .resultsHeading .step { margin-bottom: 5px; }
@@ -866,6 +906,7 @@ textarea {
   .previewMap { height: 220px; }
   .homeFooter { gap: 12px; }
   .createPage { padding-right: 16px; padding-left: 16px; }
+  .createAccount { margin-top: 12px; }
   .conditionForm { padding: 20px 16px; }
   .searchResultsLayout { grid-template-columns: 1fr; }
   .searchResultsMap { position: static; }
@@ -885,6 +926,9 @@ textarea {
   .heroActions > * { justify-content: center; text-align: center; }
   .homeFooter { flex-direction: column; }
   .optionGrid { grid-template-columns: 1fr; }
+  .preferenceChipGrid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .priorityEditor > label { align-items: flex-start; flex-direction: column; }
+  .priorityEditor select { width: 100%; }
 }
 
 @media (max-width: 600px) {

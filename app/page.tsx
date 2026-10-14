@@ -1,4 +1,5 @@
 import Link from "next/link";
+import AccountControl from "@/components/account-control";
 
 export default function Home() {
   return (
@@ -6,7 +7,7 @@ export default function Home() {
       <div className="homeShell">
         <nav className="homeNav" aria-label="주 메뉴">
           <Link className="brand" href="/">PLANLESS<span>TRAVEL, ADAPTED</span></Link>
-          <div><Link href="/history">저장된 여행</Link><Link href="/create">새 일정</Link></div>
+          <div><Link href="/history">저장된 여행</Link><Link href="/create">새 일정</Link><AccountControl /></div>
         </nav>
         <section className="hero">
           <div className="heroCopy">

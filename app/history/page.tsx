@@ -1,5 +1,7 @@
 import Link from "next/link";
+import { redirect } from "next/navigation";
 import { createSupabaseClient } from "@/lib/supabase";
+import AccountControl from "@/components/account-control";
 
 export const dynamic = "force-dynamic";
 
@@ -14,12 +16,15 @@ type TripRecord = {
 export default async function HistoryPage() {
   let trips: TripRecord[] = [];
   let errorMessage = "";
+  const supabase = await createSupabaseClient();
+  const { data: { user }, error: authError } = await supabase.auth.getUser();
+  if (authError || !user) redirect("/auth/login?next=%2Fhistory");
 
   try {
-    const supabase = createSupabaseClient();
     const { data, error } = await supabase
       .from("trips")
       .select("id, destination, title, summary, created_at")
+      .eq("user_id", user.id)
       .order("created_at", { ascending: false })
       .limit(50);
 
@@ -42,6 +47,7 @@ export default async function HistoryPage() {
           <Link className="backLink" href="/">PLANLESS</Link>
           <Link href="/create">새 일정</Link>
           <Link href="/history" aria-current="page">기록</Link>
+          <AccountControl />
         </nav>
         <header className="pageHeader">
           <p className="step">YOUR TRIPS</p>
