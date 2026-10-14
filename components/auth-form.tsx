@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createSupabaseBrowserClient } from "@/lib/supabase-browser";
 
@@ -32,6 +32,12 @@ function friendlyAuthError(error: unknown, stage: string) {
   if (message.includes("password should be at least") || message.includes("password is too short")) return { text: "비밀번호를 8자 이상으로 입력해주세요.", diagnostic };
   if (message.includes("provider is not enabled") || message.includes("unsupported provider")) return { text: "Supabase 대시보드에서 Google 로그인을 설정해주세요.", diagnostic };
   if (message.includes("redirect") || message.includes("flow state")) return { text: "인증 주소 설정을 확인해주세요. 잠시 후 다시 시도해주세요.", diagnostic };
+  if (stage === "signup" && (diagnostic.code === "over_email_send_rate_limit" || diagnostic.status === 429)) {
+    return { text: "Supabase 이메일 발송 제한에 도달했습니다. 대시보드에서 이메일 확인을 끄고, 제한이 해제된 뒤 다시 시도해주세요.", diagnostic };
+  }
+  if (stage === "signup" && diagnostic.code === "signup_session_missing") {
+    return { text: "가입은 완료됐지만 로그인 세션이 발급되지 않았습니다. Supabase 대시보드에서 이메일 확인(Confirm email)이 꺼져 있는지 확인해주세요.", diagnostic };
+  }
   if (stage === "session-verification" || diagnostic.code.startsWith("AuthSession") || message.includes("session")) return { text: "로그인은 처리됐지만 세션 저장 또는 확인에 실패했습니다. 브라우저 쿠키 설정과 배포 도메인을 확인해주세요.", diagnostic };
   if (diagnostic.status === 429) return { text: "로그인 시도가 많습니다. 잠시 후 다시 시도해주세요.", diagnostic };
   if (message.includes("fetch") || message.includes("network")) return { text: "Supabase 서버에 연결할 수 없습니다. 배포 환경과 네트워크를 확인해주세요.", diagnostic };
@@ -47,6 +53,7 @@ export default function AuthForm({ mode }: { mode: AuthMode }) {
   const [error, setError] = useState("");
   const [diagnostic, setDiagnostic] = useState("");
   const [message, setMessage] = useState("");
+  const submitting = useRef(false);
 
   useEffect(() => {
     const candidate = new URLSearchParams(window.location.search).get("next");
@@ -58,6 +65,8 @@ export default function AuthForm({ mode }: { mode: AuthMode }) {
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (submitting.current) return;
+    submitting.current = true;
     setBusy(true);
     setError("");
     setDiagnostic("");
@@ -69,15 +78,15 @@ export default function AuthForm({ mode }: { mode: AuthMode }) {
         failureStage = "signup";
         const { data, error: authError } = await supabase.auth.signUp({
           email: email.trim(), password,
-          options: { emailRedirectTo: `${window.location.origin}/auth/callback?next=${encodeURIComponent(nextPath)}` },
         });
         if (authError) throw authError;
-        if (!data.session) {
-          setMessage("가입 요청을 완료했습니다. 이메일의 인증 링크를 눌러 가입을 마쳐주세요.");
-        } else {
-          router.replace(nextPath);
-          router.refresh();
-        }
+        if (!data.session) throw Object.assign(new Error("회원가입 응답에 세션이 없습니다. Supabase의 이메일 확인 설정을 확인해주세요."), { code: "signup_session_missing" });
+        failureStage = "session-verification";
+        const { data: userData, error: sessionError } = await supabase.auth.getUser();
+        if (sessionError) throw sessionError;
+        if (!userData.user) throw Object.assign(new Error("가입 직후 세션에서 사용자를 확인할 수 없습니다."), { code: "session_user_missing" });
+        router.replace(nextPath);
+        router.refresh();
       } else if (mode === "login") {
         failureStage = "password-login";
         const { data, error: authError } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
@@ -110,6 +119,7 @@ export default function AuthForm({ mode }: { mode: AuthMode }) {
       setError(result.text);
       setDiagnostic(`단계: ${result.diagnostic.stage} · 코드: ${result.diagnostic.code} · HTTP: ${result.diagnostic.status} · 메시지: ${result.diagnostic.message}`);
     } finally {
+      submitting.current = false;
       setBusy(false);
     }
   };
