@@ -52,7 +52,10 @@ const itinerarySchema = {
         type: "OBJECT",
         properties: {
           placeName: { type: "STRING" },
-          duration: { type: "INTEGER" },
+          duration: {
+            type: "INTEGER",
+            description: "Stay duration in whole minutes. Must be from 10 through remainingTime * 60; all item durations combined must not exceed remainingTime * 60.",
+          },
           reason: { type: "STRING" },
         },
         required: ["placeName", "duration", "reason"],
@@ -165,7 +168,7 @@ ${JSON.stringify(places)}`;
 변경 사유, 현재 상황의 모든 선택 항목, 직접 입력한 추가 상황과 활동 우선순위 및 자유 요청을 함께 반영하라. 이전 조건과 새 조건이 다르면 새 조건을 사용하라.
 새 장소는 위 places 배열의 Google Places 결과에 있는 장소만 사용하라.`
     : "";
-  const prompt = basePrompt + replanPrompt;
+  const prompt = basePrompt + "\nReturn duration as a whole-number count of minutes, from 10 through remainingTime * 60. The sum of all durations must not exceed remainingTime * 60. Do not return strings or unit suffixes." + replanPrompt;
 
   const response = await generateWithRetry(ai, prompt);
 
@@ -206,13 +209,21 @@ ${JSON.stringify(places)}`;
     if (usedNames.has(place.name)) {
       throw new Error("일정에 중복 장소가 포함되어 일정을 취소했습니다.");
     }
-    if (
-      typeof item.duration !== "number" ||
-      !Number.isInteger(item.duration) ||
-      item.duration < 10 ||
-      item.duration > conditions.remainingTime * 60
-    ) {
-      throw new Error("일정 체류 시간이 올바르지 않아 일정을 취소했습니다.");
+    const rawDuration = item.duration;
+    const duration = typeof rawDuration === "number"
+      ? rawDuration
+      : typeof rawDuration === "string" && /^\d+$/.test(rawDuration.trim())
+        ? Number(rawDuration.trim())
+        : Number.NaN;
+    const maxDuration = conditions.remainingTime * 60;
+    if (!Number.isSafeInteger(duration) || duration < 10 || duration > maxDuration) {
+      const received = rawDuration === undefined
+        ? "누락"
+        : typeof rawDuration + ": " + String(rawDuration).slice(0, 32);
+      throw new Error(
+        "일정 체류 시간이 올바르지 않아 일정을 취소했습니다. " +
+        "(받은 값: " + received + "; 허용 범위: 10~" + maxDuration + "분 정수)"
+      );
     }
     if (typeof item.reason !== "string" || !item.reason.trim()) {
       throw new Error("일정 선택 이유가 없어 일정을 취소했습니다.");
@@ -221,7 +232,7 @@ ${JSON.stringify(places)}`;
     usedNames.add(place.name);
     return {
       ...place,
-      duration: item.duration,
+      duration,
       reason: item.reason,
     };
   });

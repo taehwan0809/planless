@@ -19,7 +19,7 @@ Google Places와 Gemini 키는 서버 환경 변수로만 둡니다. `NEXT_PUBLI
 
 ### 데이터베이스 마이그레이션
 
-`supabase/migrations/20261014000100_add_auth_ownership_rls.sql`의 내용을 Supabase SQL Editor에서 검토한 뒤 실행하세요. 이 마이그레이션은 `trips.user_id`를 nullable로 추가하고 `trips`와 `itineraries`에 대한 기존 RLS 정책을 제거한 다음, 로그인 사용자 소유권 정책으로 교체합니다. 저장소에는 기존 정책 정의가 없어 실제 프로젝트에 적용된 정책은 확인하지 못했습니다. SQL Editor의 현재 정책을 먼저 검토하고, 이 두 테이블의 기존 접근 규칙이 위 정책으로 대체되어도 되는지 확인하세요.
+`supabase/migrations/20261014000100_add_auth_ownership_rls.sql`의 내용을 Supabase SQL Editor에서 검토한 뒤 실행하세요. 이 마이그레이션은 `trips.user_id`를 nullable로 추가하고 `trips`와 `itineraries`에 대한 기존 RLS 정책을 제거한 다음, 로그인 사용자 소유권 정책으로 교체합니다. 저장소에는 기존 정책 정의가 없어 실제 프로젝트에 적용된 정책은 확인하지 못했습니다. SQL Editor의 현재 정책을 먼저 검토하고, 이 두 테이블의 기존 접근 규칙이 위 정책으로 대체되어도 되는지 확인하세요. 배포 DB의 trips.user_id 컬럼 및 소유자 정책을 보장하려면 이후 보강 마이그레이션인 supabase/migrations/20261021000100_reconcile_trip_ownership.sql도 적용하세요. 이 작업은 기존 여행의 소유자를 추정하지 않으며, 컬럼이 이미 있으면 그대로 둡니다. PGRST204가 계속 발생하고 컬럼이 실제로 존재한다면 SQL Editor에서 NOTIFY pgrst, 'reload schema';를 실행한 뒤, Vercel의 Supabase URL이 해당 DB 프로젝트를 가리키는지 확인하세요.
 
 기존 `user_id`가 없는 여행은 어떤 계정에도 할당하지 않습니다. RLS 적용 뒤에는 기존 여행 목록과 상세 화면에서 보이지 않으며, 원본 행은 삭제하지 않습니다. 데이터 소유권을 입증할 별도 정보가 있을 때만 별도의 검토된 이전 작업으로 계정에 연결하세요.
 
